@@ -302,8 +302,8 @@ class DuckDBExecutor:
     def _read_upstream(self, name: str, *, row_filter=None) -> pa.Table:
         """Read an upstream Iceberg table at its current snapshot, optionally row-filtered."""
         table = self.catalog_mgr.load_table(name)
-        if table.current_snapshot() is None:
-            return pa.table({})  # empty
+        # A table without a snapshot still has a schema. Let the Iceberg scan
+        # preserve it so projections and downstream empty tables remain valid.
         scan_kwargs = {"row_filter": row_filter} if row_filter is not None else {}
         return table.scan(**scan_kwargs).to_arrow()
 

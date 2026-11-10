@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validated, and `push` requires the Flink engine.
 
 ### Fixed
+- Never-written Iceberg sources retain their schema during DuckDB refreshes,
+  allowing empty tables to materialize and later receive their first rows.
 - DuckDB result conversion supports the Arrow API in DuckDB 2 while retaining
   compatibility with older supported DuckDB 1.x releases.
 - Unpartitioned `INCREMENTAL` refresh is now idempotent (recompute and
