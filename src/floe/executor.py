@@ -271,7 +271,12 @@ class DuckDBExecutor:
                     f"WHERE {col} >= DATE '{cutoff.isoformat()}'"
                 )
 
-            return con.execute(rewritten).fetch_arrow_table()
+            result = con.sql(rewritten)
+            # DuckDB 2 removed fetch_arrow_table. Prefer its replacement while
+            # retaining support for older 1.x versions allowed by our dependency.
+            if hasattr(result, "to_arrow_table"):
+                return result.to_arrow_table()
+            return result.fetch_arrow_table()
         finally:
             con.close()
 
