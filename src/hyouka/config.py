@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import os
+import re
+from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from hyouka.models import _parse_lag
 
 # Compute engines Hyouka can run a refresh on.
 #
@@ -130,6 +135,145 @@ class ComputeConfig(BaseModel):
         return self
 
 
+SUPPORTED_SOURCE_FORMATS = frozenset({"json", "csv", "parquet"})
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_]\w*$")
+_TABLE_NAME_RE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)+$")
+
+
+class SourceConfig(BaseModel):
+    """A declarative source: files that Hyouka loads into a bronze Iceberg table.
+
+    A source points at either remote files (``url``) or local files (``path``).
+    Each file is loaded at most once. The set of files already loaded is recorded
+    in the Iceberg snapshot summary of the commit that wrote them, so the target
+    table itself is the checkpoint ("Data as State"). There is no side database.
+
+    ``url`` may be a time template. With ``every``/``start``/``end`` Hyouka expands
+    one URL per time step, for example GH Archive's hourly files::
+
+        url: https://data.gharchive.org/{time:%Y-%m-%d}-{hour}.json.gz
+        every: 1 hour
+        start: 2024-01-15 00:00
+        end: 2024-01-16 23:00
+
+    Template fields: ``time`` (datetime, accepts strftime specs), ``date``
+    (``YYYY-MM-DD``), and the integers ``year``, ``month``, ``day``, ``hour``,
+    ``minute``. ``path`` is a glob relative to the project root.
+
+    Each file is read with DuckDB (``read_json`` / ``read_csv`` / ``read_parquet``)
+    as a relation named ``raw``, and ``select`` shapes it into the bronze schema.
+    Rows that fail any of ``checks`` go to the ``quarantine`` table with a
+    ``_hyouka_dq_failure_reason`` column. Without a quarantine table a failing row
+    aborts the load, so bad data is never silently dropped.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str = Field(..., description="Target Iceberg table, e.g. 'bronze.events'.")
+    url: str | None = Field(default=None, description="URL or time-templated URL.")
+    path: str | None = Field(default=None, description="Local glob, relative to project root.")
+    format: str | None = Field(
+        default=None, description="json | csv | parquet. Inferred from the file extension."
+    )
+    options: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Named parameters passed to the DuckDB reader (e.g. columns, delim).",
+    )
+    every: str | None = Field(default=None, description="Time step for templated URLs.")
+    start: datetime | None = Field(default=None, description="First time step (UTC).")
+    end: datetime | None = Field(
+        default=None, description="Last time step, inclusive (UTC). Defaults to now."
+    )
+    select: str = Field(
+        default="SELECT * FROM raw",
+        description="DuckDB SQL over the relation `raw` that produces the table rows.",
+    )
+    checks: dict[str, str] = Field(
+        default_factory=dict,
+        description="Data quality checks: name -> SQL boolean expression over select output.",
+    )
+    quarantine: str | None = Field(
+        default=None, description="Iceberg table that receives rows failing a check."
+    )
+    parallel: int = Field(
+        default=4, ge=1, le=64, description="Files fetched and parsed concurrently."
+    )
+
+    @field_validator("table", "quarantine")
+    @classmethod
+    def _validate_table_name(cls, v: str | None) -> str | None:
+        if v is not None and not _TABLE_NAME_RE.match(v):
+            raise ValueError(f"table name {v!r} must be namespace-qualified, e.g. 'bronze.events'")
+        return v
+
+    @field_validator("format")
+    @classmethod
+    def _validate_format(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        fmt = v.strip().lower()
+        if fmt not in SUPPORTED_SOURCE_FORMATS:
+            supported = ", ".join(sorted(SUPPORTED_SOURCE_FORMATS))
+            raise ValueError(f"unsupported source format {v!r} (supported: {supported})")
+        return fmt
+
+    @field_validator("options")
+    @classmethod
+    def _validate_option_names(cls, v: dict[str, Any]) -> dict[str, Any]:
+        for key in v:
+            if not _IDENTIFIER_RE.match(key):
+                raise ValueError(f"reader option name {key!r} is not a valid identifier")
+        return v
+
+    @field_validator("checks")
+    @classmethod
+    def _validate_check_names(cls, v: dict[str, str]) -> dict[str, str]:
+        for key in v:
+            if not _IDENTIFIER_RE.match(key):
+                raise ValueError(f"check name {key!r} is not a valid identifier")
+        return v
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def _accept_dates(cls, v: Any) -> Any:
+        # YAML turns `2024-01-15` into a date. Treat it as midnight.
+        if isinstance(v, date) and not isinstance(v, datetime):
+            return datetime(v.year, v.month, v.day)
+        return v
+
+    @field_validator("start", "end")
+    @classmethod
+    def _as_utc(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return v
+        return v.replace(tzinfo=UTC) if v.tzinfo is None else v.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def _validate_location(self) -> SourceConfig:
+        if (self.url is None) == (self.path is None):
+            raise ValueError(f"source {self.table!r} needs exactly one of 'url' or 'path'")
+        if self.is_time_templated:
+            if self.every is None or self.start is None:
+                raise ValueError(
+                    f"source {self.table!r} has a templated url, so it needs 'every' and 'start'"
+                )
+            _parse_lag(self.every)  # raises on a bad duration
+            if self.end is not None and self.end < self.start:
+                raise ValueError(f"source {self.table!r}: 'end' is before 'start'")
+        elif self.every or self.start or self.end:
+            raise ValueError(
+                f"source {self.table!r}: 'every'/'start'/'end' only apply to a templated url"
+            )
+        if self.quarantine is not None and self.quarantine == self.table:
+            raise ValueError(f"source {self.table!r}: quarantine must be a different table")
+        return self
+
+    @property
+    def is_time_templated(self) -> bool:
+        return self.url is not None and "{" in self.url
+
+
 class DefaultsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -147,8 +291,22 @@ class HyoukaConfig(BaseModel):
     compute: ComputeConfig = Field(default_factory=ComputeConfig)
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     transformations_dir: str = Field(default="transformations")
+    sources: list[SourceConfig] = Field(
+        default_factory=list,
+        description="Declarative sources loaded into bronze tables by `hyouka load` / `hyouka run`.",
+    )
 
     project_root: Path = Field(default_factory=Path.cwd, exclude=True)
+
+    @model_validator(mode="after")
+    def _validate_unique_source_tables(self) -> HyoukaConfig:
+        seen: set[str] = set()
+        for src in self.sources:
+            for name in filter(None, (src.table, src.quarantine)):
+                if name in seen:
+                    raise ValueError(f"table {name!r} is written by more than one source")
+                seen.add(name)
+        return self
 
     @classmethod
     def load(cls, path: str | Path) -> HyoukaConfig:

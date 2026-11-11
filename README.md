@@ -52,6 +52,7 @@ The vision is to bring Snowflake-style Dynamic Tables to Apache Iceberg, without
 - **Event-driven refresh via polling** — `hyouka watch` keeps derived tables fresh as upstream Iceberg tables receive new snapshots
 - **Pluggable compute engine** — refresh in-process with DuckDB (default), or run the same SQL on an Apache **Flink** cluster with `compute.engine: flink`; the Flink engine does batch refresh (`trigger: poll`, unpartitioned tables) and **streaming push** (`trigger: push`, single-source append-only transforms), writing back to the same open Iceberg tables. Engine (who computes) and trigger (how a refresh starts) are independent axes.
 - **Automatic lineage injection** — every row in a derived table carries `_hyouka_input_snapshot_id` and `_hyouka_job_run_id` columns
+- **Declarative sources**: list raw files in `hyouka.yaml` (a time-templated URL such as GH Archive's hourly dumps, or a local glob) and Hyouka loads them into bronze Iceberg tables, fetching only files it has not loaded yet. Rows that fail declared checks go to a quarantine table. `hyouka run` loads sources and refreshes the DAG in one command. See [6.2.1](#621-declarative-sources).
 - **Stateless workers** — all state lives in Iceberg snapshots; no external state stores
 
 **Roadmap (v0.2 and beyond):**
@@ -571,6 +572,8 @@ CREATE DYNAMIC TABLE silver.payments
 
 The quarantine table is a regular Iceberg table with an additional `_hyouka_dq_failure_reason` column. An alert fires if the quarantine write rate exceeds a configured threshold.
 
+> **Implementation status:** quarantine routing ships today for [declarative sources](#621-declarative-sources): each source can declare named SQL `checks`, and failing rows land in its `quarantine` table with `_hyouka_dq_failure_reason` set to the failed check names. The DIT-level `DQ_RULES` / `ON_DQ_FAIL` clauses shown above, and quarantine-rate alerting, are still roadmap.
+
 ### 3.6 Automatic Snapshot Lineage
 
 Every DIT write automatically injects lineage metadata columns. These are non-optional — they are how Hyouka guarantees auditability for payment-impacting and compliance-sensitive data.
@@ -849,9 +852,66 @@ defaults:
   lineage: true                          # inject _hyouka_* lineage columns
 
 transformations_dir: transformations
+
+sources:                                 # optional, see 6.2.1
+  - table: bronze.raw_orders             # target Iceberg table (created on first load)
+    path: data/orders/*.csv              # local glob, or `url:` for remote files
 ```
 
 Credentials and environment-specific locations can be injected at runtime through `HYOUKA_*` environment variables (12-factor), which is how the bundled Docker Compose stack points the same image at Postgres and MinIO without editing this file. Dedicated top-level `storage` and `event_bus` blocks, and a multi-engine `compute` block (`mode` / `parallelism`), are roadmap (v0.2+).
+
+#### 6.2.1 Declarative sources
+
+DITs only transform data that is already in Iceberg. A `sources` entry closes that gap without pipeline code: it names raw files and the bronze table they feed, and `hyouka load` (or `hyouka run`) loads each file once.
+
+```yaml
+sources:
+  - table: bronze.github_events          # target table, created on the first load
+    url: https://data.gharchive.org/{time:%Y-%m-%d}-{hour}.json.gz
+    every: 1 hour                        # one file per step from start to end (inclusive)
+    start: 2024-01-15 00:00              # UTC
+    end: 2024-01-17 23:00                # optional, defaults to now
+    format: json                         # json | csv | parquet, inferred from the extension
+    options:                             # named parameters for DuckDB's read_json/read_csv/read_parquet
+      columns: {id: VARCHAR, type: VARCHAR, created_at: VARCHAR}
+    select: |                            # DuckDB SQL over `raw`, one file at a time
+      SELECT TRY_CAST(id AS BIGINT) AS event_id, type AS event_type,
+             TRY_CAST(created_at AS TIMESTAMPTZ) AS created_at
+      FROM raw
+    checks:                              # name: SQL boolean (NULL counts as a failure)
+      has_event_id: event_id IS NOT NULL
+    quarantine: quarantine.github_events # failing rows go here instead of bronze
+    parallel: 4                          # files fetched and parsed concurrently
+```
+
+| Key | Meaning |
+|-----|---------|
+| `url` | One remote file, or a template filled per time step. Fields: `time` (accepts strftime specs, `{time:%Y%m%d}`), `date` (`YYYY-MM-DD`), and the integers `year`, `month`, `day`, `hour`, `minute`. |
+| `path` | Local glob relative to the project root (`**` recurses). Each match is one file. |
+| `select` | Shapes each file into the table's columns. Defaults to `SELECT * FROM raw`. |
+| `checks` / `quarantine` | Rows failing any check go to `quarantine` with `_hyouka_dq_failure_reason` listing the failed checks. Without `quarantine`, a failing row stops the load so bad data is never dropped silently. |
+
+How a load works:
+
+```mermaid
+flowchart LR
+    Y["hyouka.yaml<br/>sources"] --> E["expand to files<br/>(time steps or glob)"]
+    E --> S{"already in a<br/>snapshot summary?"}
+    S -->|yes| K["skip"]
+    S -->|no| W["fetch + DuckDB read<br/>select, checks<br/>(parallel workers)"]
+    W --> Q[("quarantine table<br/>failed rows")]
+    W --> B[("bronze table<br/>passing rows")]
+    B -.->|"hyouka.source.files<br/>in the same commit"| S
+```
+
+- **Load bookkeeping lives in Iceberg.** Each append records the files it contains in its snapshot summary (`hyouka.source.files`), in the same atomic commit as the rows. There is no checkpoint store that can disagree with the data. Quarantine commits record their files too, so retrying after a crash between the two commits does not duplicate quarantined rows.
+- **Batched commits.** Files are committed in order, roughly one million rows per Iceberg append, which keeps data files reasonably sized.
+- **Missing remote files** (HTTP 404/410) are reported and retried on the next run, which suits feeds that publish with a delay. Other HTTP errors are retried with backoff, then fail the load after committing the files that already finished.
+- **Downloads** are cached under `.hyouka/downloads/` while in flight and deleted once committed. Every row gets `_hyouka_source_file` and `_hyouka_loaded_at` lineage columns.
+
+Current limits: a file is identified by its URL or relative path, so editing a local file after it loads does not reload it. Changing `select` only affects files loaded afterwards. Expiring a source table's snapshots also forgets which files they loaded. Two concurrent loads of the same source can both append a file. `hyouka watch` does not load sources, so run `hyouka run` on a schedule instead.
+
+`hyouka run` loads every source, then refreshes all DITs in dependency order. DITs whose upstream snapshots did not change are skipped, so a run with no new files finishes in seconds.
 
 ### 6.3 Declarative SQL DDL
 
@@ -935,6 +995,8 @@ def weekly_completeness(spark, table: str, week: str) -> bool:
 # Shipped in v0.1. Every command accepts -c/--config (default: hyouka.yaml).
 hyouka init my-pipeline           # scaffold a new project (hyouka.yaml + transformations/, warehouse/)
 hyouka plan                       # validate DIT definitions and print the DAG
+hyouka load                       # load new files from declared sources into bronze tables
+hyouka run                        # load sources, then refresh every DIT (the whole pipeline)
 hyouka apply                      # refresh every DIT once, in dependency order
 hyouka refresh silver.orders      # refresh a single DIT now
 hyouka status                     # per-table status: exists, mode, lag, snapshot, checkpoint, upstream
@@ -1121,7 +1183,8 @@ Building the same system yourself requires writing Flink jobs per transformation
 - [x] `INCREMENTAL` and `FULL` refresh modes
 - [x] Partition-aware refresh (`PARTITION BY` + `PARTITION_WINDOW` + `PARTITION_FRESHNESS`)
 - [x] Automatic `_hyouka_*` lineage column injection
-- [x] CLI: `init`, `plan`, `apply`, `refresh`, `status`, `dag`, `watch`, `version`
+- [x] CLI: `init`, `plan`, `load`, `run`, `apply`, `refresh`, `status`, `dag`, `watch`, `version`
+- [x] Declarative sources (time-templated URLs and local globs) loaded incrementally into bronze tables, with check-based quarantine routing
 - [x] Polling-based event detection (`hyouka watch`) — push-based hooks move to v0.2
 - [x] Docker Compose local stack (MinIO warehouse + Postgres catalog + worker; opt-in Flink, SQL-workbench, and container-UI profiles)
 
@@ -1130,7 +1193,7 @@ Building the same system yourself requires writing Flink jobs per transformation
 - [ ] Push-based event detection: Iceberg commit listeners + pluggable Event Bus (NATS / EventBridge / Event Hubs / Pub/Sub)
 - [ ] `PRECONDITIONS` DSL (built-in functions + custom Python)
 - [ ] `DQ_RULES` DSL
-- [ ] Quarantine routing (`ON_DQ_FAIL ROUTE TO`)
+- [ ] Quarantine routing (`ON_DQ_FAIL ROUTE TO`) for DITs (source-level quarantine already ships)
 - [ ] DQ alerting (threshold-based quarantine rate)
 
 ### v0.3 — Cloud Deployment
