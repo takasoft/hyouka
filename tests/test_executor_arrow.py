@@ -53,3 +53,56 @@ def test_never_written_source_keeps_schema_through_two_hops(
     source.append(sample_orders)
     assert all(not r.skipped for r in pipeline.refresh_all())
     assert catalog_mgr.load_table("gold.totals").scan().to_arrow()["n"].to_pylist() == [3]
+
+
+def test_local_upstreams_are_scanned_as_parquet_files(catalog_mgr, sample_orders):
+    catalog_mgr.ensure_namespace("bronze")
+    catalog_mgr.catalog.create_table("bronze.orders", schema=sample_orders.schema)
+    catalog_mgr.append("bronze.orders", sample_orders)
+    catalog_mgr.append("bronze.orders", sample_orders)
+    executor = DuckDBExecutor(catalog_mgr, {})
+
+    view = executor._parquet_view_sql("bronze.orders", None, None)
+    assert view is not None and view.count(".parquet'") == 2
+
+    dit = parse_dit_sql(
+        "CREATE DYNAMIC TABLE gold.totals REFRESH_MODE = 'FULL' "
+        "AS SELECT count(*) AS n, sum(amount) AS total FROM bronze.orders"
+    )
+    assert executor._execute_query(dit).to_pylist() == [{"n": 6, "total": 85.5}]
+
+
+def test_evolved_schemas_fall_back_to_the_iceberg_reader(catalog_mgr, sample_orders):
+    from pyiceberg.types import StringType
+
+    catalog_mgr.ensure_namespace("bronze")
+    table = catalog_mgr.catalog.create_table("bronze.orders", schema=sample_orders.schema)
+    table.append(sample_orders)
+    with table.update_schema() as update:
+        update.rename_column("amount", "total")
+        update.add_column("note", StringType())
+    executor = DuckDBExecutor(catalog_mgr, {})
+
+    # Parquet files still say "amount"; only Iceberg's field IDs map it to "total".
+    assert executor._parquet_view_sql("bronze.orders", None, None) is None
+    dit = parse_dit_sql(
+        "CREATE DYNAMIC TABLE gold.totals REFRESH_MODE = 'FULL' "
+        "AS SELECT sum(total) AS total FROM bronze.orders"
+    )
+    assert executor._execute_query(dit).to_pylist() == [{"total": 42.75}]
+
+
+def test_escaped_parquet_column_names_fall_back_to_the_iceberg_reader(catalog_mgr):
+    catalog_mgr.ensure_namespace("bronze")
+    data = pa.table({"Event Type": ["push", "push", "fork"]})
+    catalog_mgr.catalog.create_table("bronze.events", schema=data.schema)
+    catalog_mgr.append("bronze.events", data)
+    executor = DuckDBExecutor(catalog_mgr, {})
+
+    # PyIceberg stores "Event Type" as "Event_x20Type" inside the Parquet files.
+    assert executor._parquet_view_sql("bronze.events", None, None) is None
+    dit = parse_dit_sql(
+        "CREATE DYNAMIC TABLE gold.types REFRESH_MODE = 'FULL' "
+        'AS SELECT count(DISTINCT "Event Type") AS n FROM bronze.events'
+    )
+    assert executor._execute_query(dit).to_pylist() == [{"n": 2}]
