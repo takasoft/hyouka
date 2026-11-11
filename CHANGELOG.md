@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Declarative `sources` in `floe.yaml`: load remote files (a single URL, or a
+  time-templated URL expanded per `every` step between `start` and `end`) or
+  local globs into bronze Iceberg tables. Each file is read with DuckDB,
+  shaped by a `select` over the relation `raw`, and loaded once. The
+  loaded set is recorded in the snapshot summary of the commit that wrote it.
+  Optional named `checks` route failing rows to a `quarantine` table with a
+  `_floe_dq_failure_reason` column. Missing remote files (404/410) are retried
+  on the next run.
+- `floe load` (load sources only) and `floe run` (load sources, then refresh
+  every DIT) commands, plus `Pipeline.load_sources()` and `Pipeline.run()`.
 - Docker Compose deployment with MinIO (S3-compatible object storage) and a
   Postgres-backed Iceberg SQL catalog, plus a multi-stage, non-root `Dockerfile`.
 - Pluggable compute engine with a new opt-in **Flink** engine

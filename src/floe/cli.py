@@ -1,4 +1,4 @@
-"""Floe CLI — `floe init`, `floe plan`, `floe apply`, `floe refresh`, `floe status`."""
+"""Floe CLI: `floe init`, `floe plan`, `floe load`, `floe run`, `floe apply`, `floe status`, ..."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table as RichTable
 
 from floe.pipeline import Pipeline
@@ -69,6 +70,12 @@ def plan(config: Path = typer.Option(Path(DEFAULT_CONFIG), "--config", "-c")):
     """Validate DIT definitions and show the DAG."""
     pipeline = Pipeline.from_config(config)
     console.print(f"[bold]Project:[/bold] {pipeline.config.project}")
+    if pipeline.sources:
+        console.print(f"[bold]Declared sources:[/bold] {len(pipeline.sources)}")
+        for src in pipeline.sources:
+            where = src.url or src.path
+            extra = f" (quarantine: {src.quarantine})" if src.quarantine else ""
+            console.print(escape(f"  - {src.table} <- {where}{extra}"))
     console.print(f"[bold]Discovered DITs:[/bold] {len(pipeline.dits)}")
     console.print()
     console.print(pipeline.planner.render_ascii())
@@ -82,8 +89,74 @@ def apply(config: Path = typer.Option(Path(DEFAULT_CONFIG), "--config", "-c")):
         f"[bold]Engine:[/bold] {pipeline.config.compute.engine}    "
         f"[bold]Trigger:[/bold] {pipeline.config.compute.trigger}"
     )
-    results = pipeline.refresh_all()
+    _print_refresh_results(pipeline.refresh_all())
 
+
+@app.command()
+def load(config: Path = typer.Option(Path(DEFAULT_CONFIG), "--config", "-c")):
+    """Load new files from every declared source into its bronze table."""
+    pipeline = Pipeline.from_config(config)
+    if not pipeline.sources:
+        console.print("[yellow]No sources declared in the config.[/yellow]")
+        raise typer.Exit(1)
+    _print_load_results(pipeline.load_sources(progress=_log))
+
+
+@app.command()
+def run(config: Path = typer.Option(Path(DEFAULT_CONFIG), "--config", "-c")):
+    """Run the whole pipeline: load declared sources, then refresh every DIT."""
+    pipeline = Pipeline.from_config(config)
+    console.print(
+        f"[bold]Engine:[/bold] {pipeline.config.compute.engine}    "
+        f"[bold]Sources:[/bold] {len(pipeline.sources)}    "
+        f"[bold]DITs:[/bold] {len(pipeline.dits)}"
+    )
+    loads = pipeline.load_sources(progress=_log)
+    if loads:
+        _print_load_results(loads)
+
+    def _log_refresh(r):
+        state = "skipped" if r.skipped else f"{r.rows_written:,} rows"
+        _log(f"{r.table}: {state} ({r.duration_ms:,} ms)")
+
+    _print_refresh_results(pipeline.refresh_all(on_result=_log_refresh))
+
+
+def _log(message: str) -> None:
+    console.print(f"[dim]{escape(message)}[/dim]")
+
+
+def _print_load_results(results) -> None:
+    t = RichTable(title="Source Loads")
+    t.add_column("Table")
+    t.add_column("New files", justify="right")
+    t.add_column("Already loaded", justify="right")
+    t.add_column("Missing", justify="right")
+    t.add_column("Rows", justify="right")
+    t.add_column("Quarantined", justify="right")
+    t.add_column("Duration (ms)", justify="right")
+    for r in results:
+        t.add_row(
+            r.table,
+            str(r.files_loaded),
+            str(r.files_already_loaded),
+            str(len(r.files_missing)),
+            f"{r.rows_loaded:,}",
+            f"{r.rows_quarantined:,}",
+            f"{r.duration_ms:,}",
+        )
+    console.print(t)
+    for r in results:
+        if r.files_missing:
+            shown = ", ".join(r.files_missing[:3])
+            more = f" and {len(r.files_missing) - 3} more" if len(r.files_missing) > 3 else ""
+            console.print(
+                f"[yellow]{r.table}: {len(r.files_missing)} file(s) not found yet "
+                f"(retried next run): {escape(shown)}{more}[/yellow]"
+            )
+
+
+def _print_refresh_results(results) -> None:
     t = RichTable(title="Refresh Results")
     t.add_column("Table")
     t.add_column("Mode")
