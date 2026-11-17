@@ -74,6 +74,9 @@ def plan(config: Path = typer.Option(Path(DEFAULT_CONFIG), "--config", "-c")):
         console.print(f"[bold]Declared sources:[/bold] {len(pipeline.sources)}")
         for src in pipeline.sources:
             where = src.url or src.path
+            if src.is_time_templated:
+                end = f"{src.end:%Y-%m-%d %H:%M}" if src.end else "now"
+                where += f" every {src.every}, {src.start:%Y-%m-%d %H:%M} to {end} UTC"
             extra = f" (quarantine: {src.quarantine})" if src.quarantine else ""
             console.print(escape(f"  - {src.table} <- {where}{extra}"))
     console.print(f"[bold]Discovered DITs:[/bold] {len(pipeline.dits)}")

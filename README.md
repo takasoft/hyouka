@@ -905,6 +905,7 @@ flowchart LR
 ```
 
 - **Load bookkeeping lives in Iceberg.** Each append records the files it contains in its snapshot summary (`hyouka.source.files`), in the same atomic commit as the rows. There is no checkpoint store that can disagree with the data. Quarantine commits record their files too, so retrying after a crash between the two commits does not duplicate quarantined rows.
+- **Schema evolution.** If a batch has columns the table lacks, Hyouka adds them with Iceberg schema evolution in the same commit as the rows. Table columns missing from a batch are written as NULL, and older rows read the new columns as NULL. Several `sources` entries may load the same table, which is how to handle an upstream that changes shape on a known date: give each era its own entry, window, and `select`. New fields inside struct columns are added the same way. Entries may also share a quarantine table. An incompatible type change, or a new column whose name differs from an existing one only by case, fails the load.
 - **Batched commits.** Files are committed in order, roughly one million rows per Iceberg append, which keeps data files reasonably sized.
 - **Missing remote files** (HTTP 404/410) are reported and retried on the next run, which suits feeds that publish with a delay. Other HTTP errors are retried with backoff, then fail the load after committing the files that already finished.
 - **Downloads** are cached under `.hyouka/downloads/` while in flight and deleted once committed. Every row gets `_hyouka_source_file` and `_hyouka_loaded_at` lineage columns.

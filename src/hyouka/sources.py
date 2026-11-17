@@ -15,6 +15,13 @@ remote, and the bronze table they feed. Each ``hyouka load`` / ``hyouka run``:
 4. **Commits** results in file order, batching several files per Iceberg
    append so the table gets reasonably sized data files.
 
+**Schema evolution.** When a batch has columns the table does not, they are
+added (``union_by_name``) in the same transaction as the append, so the new
+schema, the rows, and the loaded-file record land in one commit. Table columns
+missing from a batch are written as NULL. Several sources may feed one table,
+for example one entry per upstream format with its own window and ``select``.
+A column whose type changes incompatibly fails the load.
+
 Quarantined rows are committed to the quarantine table before the passing rows
 go to the target. Each quarantine commit also records its files, so a retry
 after a crash between the two commits does not duplicate quarantined rows.
@@ -50,6 +57,9 @@ from hyouka.config import SourceConfig
 from hyouka.models import _parse_lag
 
 SOURCE_FILES_PROPERTY = "hyouka.source.files"
+# On quarantine commits: the target table the rejected rows were meant for, so
+# sources with different targets can share one quarantine table.
+SOURCE_TARGET_PROPERTY = "hyouka.source.target"
 SOURCE_FILE_COL = "_hyouka_source_file"
 LOADED_AT_COL = "_hyouka_loaded_at"
 DQ_FAILURE_COL = "_hyouka_dq_failure_reason"
@@ -195,9 +205,10 @@ def infer_format(location: str) -> str:
 # --- loaded-file bookkeeping --------------------------------------------------
 
 
-def loaded_files(catalog_mgr: CatalogManager, table: str) -> set[str]:
+def loaded_files(catalog_mgr: CatalogManager, table: str, *, target: str | None = None) -> set[str]:
     """Files recorded as loaded across every snapshot of ``table``.
 
+    With ``target``, only count quarantine commits made for that target table.
     Expiring old snapshots also forgets which files they loaded, so keep the
     snapshots of source tables (or reload into a fresh table).
     """
@@ -205,9 +216,13 @@ def loaded_files(catalog_mgr: CatalogManager, table: str) -> set[str]:
         return set()
     keys: set[str] = set()
     for snap in catalog_mgr.load_table(table).snapshots():
-        raw = snap.summary.get(SOURCE_FILES_PROPERTY) if snap.summary else None
-        if raw:
-            keys.update(json.loads(raw))
+        summary = snap.summary
+        raw = summary.get(SOURCE_FILES_PROPERTY) if summary else None
+        if not raw:
+            continue
+        if target is not None and summary.get(SOURCE_TARGET_PROPERTY, target) != target:
+            continue
+        keys.update(json.loads(raw))
     return keys
 
 
@@ -235,7 +250,9 @@ class SourceLoader:
         files = expand_source_files(source, self.project_root, now=now)
         done = loaded_files(self.catalog_mgr, source.table)
         quarantine_done = (
-            loaded_files(self.catalog_mgr, source.quarantine) if source.quarantine else set()
+            loaded_files(self.catalog_mgr, source.quarantine, target=source.table)
+            if source.quarantine
+            else set()
         )
         todo = [f for f in files if f.key not in done]
         result.files_total = len(files)
@@ -355,20 +372,19 @@ class SourceLoader:
             failed = pa.concat_tables(
                 new_failed or [batch[0].failed.slice(0, 0)], promote_options="default"
             )
-            # Create the quarantine table up front so downstream SQL can always
-            # reference it, even before anything has failed.
-            self._ensure_table(source.quarantine, failed.schema)
+            # Create (and evolve) the quarantine table even when nothing failed,
+            # so downstream SQL can always reference it and its columns.
             if failed.num_rows:
-                self.catalog_mgr.load_table(source.quarantine).append(
-                    failed, snapshot_properties={SOURCE_FILES_PROPERTY: json.dumps(keys)}
+                self._append(
+                    source.quarantine, failed, keys, extra={SOURCE_TARGET_PROPERTY: source.table}
                 )
                 quarantine_done.update(keys)
                 result.rows_quarantined += failed.num_rows
+            else:
+                self._ensure_table(source.quarantine, failed.schema)
+                self._evolve(source.quarantine, failed.schema)
 
-        self._ensure_table(source.table, passed.schema)
-        self.catalog_mgr.load_table(source.table).append(
-            passed, snapshot_properties={SOURCE_FILES_PROPERTY: json.dumps(keys)}
-        )
+        self._append(source.table, passed, keys)
         result.commits += 1
         result.files_loaded += len(batch)
         result.rows_loaded += passed.num_rows
@@ -382,10 +398,51 @@ class SourceLoader:
                 with contextlib.suppress(OSError):
                     r.local_path.unlink(missing_ok=True)
 
+    def _append(
+        self, name: str, data: pa.Table, keys: list[str], *, extra: dict[str, str] | None = None
+    ) -> None:
+        """Append ``data`` and record ``keys``, adding any new columns first.
+
+        The schema update and the append share one Iceberg transaction, so a
+        failed append never leaves behind a half-applied schema change.
+        ``union_by_name`` also adds new nested struct fields, and is a no-op
+        (no new schema version) when nothing is new.
+        """
+        self._ensure_table(name, data.schema)
+        table = self.catalog_mgr.load_table(name)
+        _reject_case_collisions(name, table, data.schema)
+        props = {SOURCE_FILES_PROPERTY: json.dumps(keys), **(extra or {})}
+        with table.transaction() as txn:
+            with txn.update_schema() as update:
+                update.union_by_name(data.schema)
+            txn.append(data, snapshot_properties=props)
+
+    def _evolve(self, name: str, schema: pa.Schema) -> None:
+        table = self.catalog_mgr.load_table(name)
+        _reject_case_collisions(name, table, schema)
+        with table.update_schema() as update:
+            update.union_by_name(schema)
+
     def _ensure_table(self, name: str, schema: pa.Schema) -> None:
         if not self.catalog_mgr.table_exists(name):
             self.catalog_mgr.ensure_namespace(name.rsplit(".", 1)[0])
             self.catalog_mgr.catalog.create_table(name, schema=schema)
+
+
+def _reject_case_collisions(name: str, table: Any, schema: pa.Schema) -> None:
+    """Refuse a new column that differs from an existing one only by case.
+
+    Iceberg would add it as a separate column, but SQL engines such as DuckDB
+    match column names case-insensitively and would merge the two.
+    """
+    existing = {c.casefold(): c for c in table.schema().column_names}
+    for col in schema.names:
+        match = existing.get(col.casefold())
+        if match is not None and match != col:
+            raise ValueError(
+                f"column {col!r} differs only by case from {match!r} in {name!r}; "
+                "rename it in the source's select"
+            )
 
 
 # --- per-file transform -------------------------------------------------------

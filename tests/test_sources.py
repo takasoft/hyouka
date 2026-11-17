@@ -83,8 +83,8 @@ def test_source_config_validation(kwargs, message):
         SourceConfig(table="bronze.events", **kwargs)
 
 
-def test_two_sources_cannot_write_the_same_table():
-    with pytest.raises(ValueError, match="more than one source"):
+def test_a_table_cannot_be_both_a_source_target_and_a_quarantine():
+    with pytest.raises(ValueError, match="also a quarantine table"):
         HyoukaConfig(
             project="p",
             sources=[
@@ -308,3 +308,91 @@ def test_quarantine_created_before_checks_accepts_failures_later(project_dir, ca
     )
     assert loader.load(checked).rows_quarantined == 1
     assert _rows(catalog_mgr, "q.orders")[DQ_FAILURE_COL].to_pylist() == ["positive"]
+
+
+def test_sources_with_different_shapes_evolve_one_table(project_dir, catalog_mgr):
+    """Two eras of one feed: a column disappears and another appears."""
+    old_dir, new_dir = project_dir / "old", project_dir / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    (old_dir / "a.csv").write_text("order_id,amount,coupon\n1,10.0,SAVE\n", encoding="utf-8")
+    (new_dir / "b.csv").write_text("order_id,amount,channel\n2,20.0,web\n", encoding="utf-8")
+    common = {"table": "sales.orders", "quarantine": "sales.orders_rejected"}
+    old = SourceConfig(
+        **common,
+        path="old/*.csv",
+        select="SELECT order_id, amount, coupon FROM raw",
+        checks={"positive": "amount > 0"},
+    )
+    new = SourceConfig(
+        **common,
+        path="new/*.csv",
+        select="SELECT order_id, amount, channel FROM raw",
+        checks={"positive": "amount > 0"},
+    )
+    HyoukaConfig(project="p", sources=[old, new])  # sharing a target is allowed
+    loader = SourceLoader(catalog_mgr, project_dir)
+
+    loader.load(old)
+    assert "channel" not in catalog_mgr.load_table("sales.orders").schema().column_names
+
+    loader.load(new)
+    table = catalog_mgr.load_table("sales.orders")
+    assert {"coupon", "channel"} <= set(table.schema().column_names)
+    rows = sorted(
+        table.scan().to_arrow().select(["order_id", "coupon", "channel"]).to_pylist(),
+        key=lambda r: r["order_id"],
+    )
+    assert rows == [
+        {"order_id": 1, "coupon": "SAVE", "channel": None},
+        {"order_id": 2, "coupon": None, "channel": "web"},
+    ]
+    # Each era's commit references the schema it was written with, and the
+    # schema change rode along with the second append rather than its own commit.
+    assert [s.schema_id for s in table.snapshots()] == [0, 1]
+    assert loaded_files(catalog_mgr, "sales.orders") == {"old/a.csv", "new/b.csv"}
+    # The empty quarantine table evolved too, so SQL can select the new column.
+    assert "channel" in catalog_mgr.load_table("sales.orders_rejected").schema().column_names
+    assert loader.load(old).files_loaded == 0
+
+
+def test_sources_with_different_targets_can_share_a_quarantine(project_dir, catalog_mgr):
+    _write_csv(project_dir / "data" / "a.csv", [(1, 10.0), (2, -5.0)])
+    shared = {"path": "data/*.csv", "quarantine": "q.rejects"}
+    by_amount = SourceConfig(table="sales.orders", checks={"positive": "amount > 0"}, **shared)
+    by_id = SourceConfig(table="sales.order_ids", checks={"small_id": "order_id < 2"}, **shared)
+    loader = SourceLoader(catalog_mgr, project_dir)
+
+    assert loader.load(by_amount).rows_quarantined == 1
+    assert loader.load(by_id).rows_quarantined == 1
+    reasons = sorted(_rows(catalog_mgr, "q.rejects")[DQ_FAILURE_COL].to_pylist())
+    assert reasons == ["positive", "small_id"]
+
+
+def test_new_nested_fields_are_added_to_struct_columns(project_dir, catalog_mgr):
+    data = project_dir / "data"
+    data.mkdir()
+    (data / "1.json").write_text('{"id": 1, "p": {"a": 1}}\n', encoding="utf-8")
+    src = SourceConfig(table="raw.events", path="data/*.json")
+    loader = SourceLoader(catalog_mgr, project_dir)
+    loader.load(src)
+
+    (data / "2.json").write_text('{"id": 2, "p": {"a": 2, "b": "x"}}\n', encoding="utf-8")
+    loader.load(src)
+    rows = sorted(
+        _rows(catalog_mgr, "raw.events").select(["id", "p"]).to_pylist(), key=lambda r: r["id"]
+    )
+    assert rows == [{"id": 1, "p": {"a": 1, "b": None}}, {"id": 2, "p": {"a": 2, "b": "x"}}]
+
+
+def test_a_new_column_differing_only_by_case_is_rejected(project_dir, catalog_mgr):
+    (project_dir / "d").mkdir()
+    (project_dir / "d" / "1.csv").write_text("id,name\n1,old\n", encoding="utf-8")
+    src = SourceConfig(table="raw.people", path="d/*.csv")
+    loader = SourceLoader(catalog_mgr, project_dir)
+    loader.load(src)
+
+    (project_dir / "d" / "2.csv").write_text("id,Name\n2,new\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="differs only by case"):
+        loader.load(src)
+    assert _rows(catalog_mgr, "raw.people").num_rows == 1

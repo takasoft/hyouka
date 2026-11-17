@@ -299,13 +299,13 @@ class HyoukaConfig(BaseModel):
     project_root: Path = Field(default_factory=Path.cwd, exclude=True)
 
     @model_validator(mode="after")
-    def _validate_unique_source_tables(self) -> HyoukaConfig:
-        seen: set[str] = set()
-        for src in self.sources:
-            for name in filter(None, (src.table, src.quarantine)):
-                if name in seen:
-                    raise ValueError(f"table {name!r} is written by more than one source")
-                seen.add(name)
+    def _validate_source_tables(self) -> HyoukaConfig:
+        # Several sources may share a target (e.g. one entry per upstream
+        # format) or a quarantine table, but a table cannot be both.
+        targets = {src.table for src in self.sources}
+        quarantines = {src.quarantine for src in self.sources if src.quarantine}
+        if both := sorted(targets & quarantines):
+            raise ValueError(f"table {both[0]!r} is a source target and also a quarantine table")
         return self
 
     @classmethod
