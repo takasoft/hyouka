@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Optional named `checks` route failing rows to a `quarantine` table with a
   `_floe_dq_failure_reason` column. Missing remote files (404/410) are retried
   on the next run.
+- Sources evolve their target table's schema: new columns in a batch are
+  added with Iceberg `union_by_name` in the same commit as the rows, and
+  missing columns are written as NULL. Several source entries may load into
+  one table, for example one per upstream format era.
 - `floe load` (load sources only) and `floe run` (load sources, then refresh
   every DIT) commands, plus `Pipeline.load_sources()` and `Pipeline.run()`.
 - Docker Compose deployment with MinIO (S3-compatible object storage) and a
