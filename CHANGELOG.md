@@ -62,9 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `read_parquet` at the data files Iceberg planned for the current snapshot,
   instead of first copying each whole table into an Arrow table in memory.
   DuckDB can then stream, project, and spill. On a 16-million-row event table
-  this cut peak memory for a full refresh from 5.5 GB to 2.2 GB. Tables with
-  delete files, an evolved schema, or remote storage use the previous Iceberg
-  reader.
+  this cut peak memory for a full refresh from 5.5 GB to 2.2 GB. Tables whose
+  schemas only gained or lost columns keep this path (missing columns read as
+  NULL). Tables with delete files, renamed or retyped columns, or remote
+  storage use the previous Iceberg reader.
 - Multi-upstream staleness detection now tracks the snapshot ID of every
   upstream table, so a downstream table refreshes when any upstream changes.
 - `compute.engine` is now validated and pluggable: `duckdb` (default) and
