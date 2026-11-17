@@ -63,7 +63,7 @@ def test_local_upstreams_are_scanned_as_parquet_files(catalog_mgr, sample_orders
     executor = DuckDBExecutor(catalog_mgr, {})
 
     view = executor._parquet_view_sql("bronze.orders", None, None)
-    assert view is not None and view.count(".parquet'") == 2
+    assert view is not None and view[0].count(".parquet'") == 2 and view[1] is None
 
     dit = parse_dit_sql(
         "CREATE DYNAMIC TABLE gold.totals REFRESH_MODE = 'FULL' "
@@ -106,3 +106,50 @@ def test_escaped_parquet_column_names_fall_back_to_the_iceberg_reader(catalog_mg
         'AS SELECT count(DISTINCT "Event Type") AS n FROM bronze.events'
     )
     assert executor._execute_query(dit).to_pylist() == [{"n": 2}]
+
+
+def test_added_columns_keep_the_parquet_scan_and_read_as_null(catalog_mgr, sample_orders):
+    catalog_mgr.ensure_namespace("bronze")
+    table = catalog_mgr.catalog.create_table("bronze.orders", schema=sample_orders.schema)
+    table.append(sample_orders)
+    newer = pa.table(
+        {
+            "order_id": pa.array([4], type=pa.int64()),
+            "customer_id": pa.array([102], type=pa.int64()),
+            "channel": pa.array(["web"], type=pa.string()),
+        }
+    )
+    with table.transaction() as txn:
+        with txn.update_schema() as update:
+            update.union_by_name(newer.schema)
+        txn.append(newer)
+    executor = DuckDBExecutor(catalog_mgr, {})
+
+    view = executor._parquet_view_sql("bronze.orders", None, None)
+    assert view is not None and view[1] is not None
+    dit = parse_dit_sql(
+        "CREATE DYNAMIC TABLE gold.by_channel REFRESH_MODE = 'FULL' AS "
+        "SELECT channel, count(*) AS n, sum(amount) AS total FROM bronze.orders "
+        "GROUP BY channel ORDER BY channel NULLS FIRST"
+    )
+    assert executor._execute_query(dit).to_pylist() == [
+        {"channel": None, "n": 3, "total": 42.75},
+        {"channel": "web", "n": 1, "total": None},
+    ]
+
+
+def test_names_differing_only_by_case_fall_back_to_the_iceberg_reader(catalog_mgr):
+    catalog_mgr.ensure_namespace("bronze")
+    first = pa.table({"id": [1], "name": ["old"]})
+    table = catalog_mgr.catalog.create_table("bronze.people", schema=first.schema)
+    table.append(first)
+    second = pa.table({"id": [2], "Name": ["new"]})
+    with table.transaction() as txn:
+        with txn.update_schema() as update:
+            update.union_by_name(second.schema)
+        txn.append(second)
+    executor = DuckDBExecutor(catalog_mgr, {})
+
+    # Parquet name matching in DuckDB ignores case and would merge the two
+    # columns. (The source loader refuses to create such a pair.)
+    assert executor._parquet_view_sql("bronze.people", None, None) is None
