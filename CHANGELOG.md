@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Declarative `sources` in `hyouka.yaml`: load remote files (a single URL, or a
+  time-templated URL expanded per `every` step between `start` and `end`) or
+  local globs into bronze Iceberg tables. Each file is read with DuckDB,
+  shaped by a `select` over the relation `raw`, and loaded once. The
+  loaded set is recorded in the snapshot summary of the commit that wrote it.
+  Optional named `checks` route failing rows to a `quarantine` table with a
+  `_hyouka_dq_failure_reason` column. Missing remote files (404/410) are retried
+  on the next run.
+- Sources evolve their target table's schema: new columns in a batch are
+  added with Iceberg `union_by_name` in the same commit as the rows, and
+  missing columns are written as NULL. Several source entries may load into
+  one table, for example one per upstream format era.
+- `hyouka load` (load sources only) and `hyouka run` (load sources, then refresh
+  every DIT) commands, plus `Pipeline.load_sources()` and `Pipeline.run()`.
 - Docker Compose deployment with MinIO (S3-compatible object storage) and a
   Postgres-backed Iceberg SQL catalog, plus a multi-stage, non-root `Dockerfile`.
 - Pluggable compute engine with a new opt-in **Flink** engine
@@ -54,6 +68,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variables to `HYOUKA_*`, delete the old `.floe/` folder, and rebuild the
   derived tables (tables written before the rename keep their `_floe_*`
   columns and `floe.*` checkpoint properties, which Hyouka does not read).
+- The DuckDB engine now reads local upstream tables by pointing
+  `read_parquet` at the data files Iceberg planned for the current snapshot,
+  instead of first copying each whole table into an Arrow table in memory.
+  DuckDB can then stream, project, and spill. On a 16-million-row event table
+  this cut peak memory for a full refresh from 5.5 GB to 2.2 GB. Tables whose
+  schemas only gained or lost columns keep this path (missing columns read as
+  NULL). Tables with delete files, renamed or retyped columns, or remote
+  storage use the previous Iceberg reader.
 - Multi-upstream staleness detection now tracks the snapshot ID of every
   upstream table, so a downstream table refreshes when any upstream changes.
 - `compute.engine` is now validated and pluggable: `duckdb` (default) and

@@ -8,11 +8,13 @@ An alternative ``flink`` engine implementing the same interface lives in
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, date, datetime, timedelta
 
 import duckdb
 import pyarrow as pa
 from pyiceberg.expressions import GreaterThanOrEqual
+from pyiceberg.io.pyarrow import sanitize_column_names, schema_to_pyarrow
 
 from hyouka.catalog import CatalogManager
 from hyouka.lineage import LINEAGE_COLUMNS, inject_lineage, new_job_run_id
@@ -259,8 +261,16 @@ class DuckDBExecutor:
                     )
 
                 row_filter = self._upstream_row_filter(upstream, window_filter)
-                arrow_table = self._read_upstream(upstream, row_filter=row_filter)
-                con.register(_view_alias(upstream), arrow_table)
+                alias = _view_alias(upstream)
+                parquet_view = self._parquet_view_sql(upstream, row_filter, window_filter)
+                if parquet_view is not None:
+                    view_sql, shape = parquet_view
+                    if shape is not None:
+                        con.register(f"{alias}__shape", shape)
+                    con.execute(f"CREATE VIEW {alias} AS {view_sql}")
+                else:
+                    arrow_table = self._read_upstream(upstream, row_filter=row_filter)
+                    con.register(alias, arrow_table)
 
             rewritten = _rewrite_table_names(dit.query, dit.upstream_tables)
 
@@ -299,6 +309,68 @@ class DuckDBExecutor:
             return None
         return GreaterThanOrEqual(col, cutoff.isoformat())
 
+    def _parquet_view_sql(
+        self,
+        name: str,
+        row_filter,
+        window_filter: tuple[str, date | None] | None,
+    ) -> tuple[str, pa.Table | None] | None:
+        """SQL that lets DuckDB scan the upstream's Parquet files directly.
+
+        Reading an upstream through ``scan().to_arrow()`` copies the whole table
+        into memory before DuckDB sees it, which caps the table size at RAM.
+        Pointing ``read_parquet`` at the data files Iceberg planned for the
+        current snapshot lets DuckDB stream, project, and spill instead.
+
+        This is only equivalent to the Iceberg read when every planned file is
+        local, has no delete files, and uses unescaped column names that mean
+        the same thing in every schema the table has had (Parquet columns are
+        matched by name, Iceberg's by field ID). Schemas may differ by added
+        or dropped columns: files are read with ``union_by_name`` and unioned
+        BY NAME with an empty table of the current schema (returned as the
+        second element, to register as ``<alias>__shape``), so a column that
+        older files lack reads as NULL with its Iceberg type. Renames, type
+        changes, and reused names return ``None`` and the caller uses the
+        Arrow path.
+        Iceberg's ``plan_files`` prunes whole files by the row filter, and the
+        window predicate is repeated in SQL to drop the remaining rows.
+        """
+        table = self.catalog_mgr.load_table(name)
+        if table.current_snapshot() is None or not _names_are_stable(table):
+            return None
+        # PyIceberg writes names that are not valid Avro names (spaces, dashes,
+        # `count_star()`, ...) under an escaped name in Parquet.
+        if sanitize_column_names(table.schema()) != table.schema():
+            return None
+        scan = table.scan(row_filter=row_filter) if row_filter is not None else table.scan()
+        paths: list[str] = []
+        for task in scan.plan_files():
+            if task.delete_files:
+                return None
+            local = _local_file_path(task.file.file_path)
+            if local is None:
+                return None
+            paths.append(local)
+        if not paths:
+            return None
+
+        columns = ", ".join(f'"{f.name}"' for f in table.schema().fields)
+        files = ", ".join("'" + p.replace("'", "''") + "'" for p in paths)
+        shape = None
+        if len(table.metadata.schemas) == 1:
+            sql = f"SELECT {columns} FROM read_parquet([{files}])"
+        else:
+            shape = schema_to_pyarrow(table.schema()).empty_table()
+            alias = _view_alias(name)
+            sql = (
+                f"SELECT {columns} FROM (SELECT * FROM {alias}__shape UNION ALL BY NAME "
+                f"SELECT * FROM read_parquet([{files}], union_by_name = true))"
+            )
+        if row_filter is not None and window_filter is not None and window_filter[1] is not None:
+            col, cutoff = window_filter
+            sql += f" WHERE \"{col}\" >= DATE '{cutoff.isoformat()}'"
+        return sql, shape
+
     def _read_upstream(self, name: str, *, row_filter=None) -> pa.Table:
         """Read an upstream Iceberg table at its current snapshot, optionally row-filtered."""
         table = self.catalog_mgr.load_table(name)
@@ -311,6 +383,46 @@ class DuckDBExecutor:
 def _view_alias(table_name: str) -> str:
     """DuckDB view alias for a fully-qualified Iceberg table."""
     return table_name.replace(".", "__")
+
+
+def _names_are_stable(table) -> bool:
+    """True if every column name meant the same field, with the same type, in
+    every schema the table has had. Added and dropped columns are fine."""
+    # DuckDB matches Parquet column names case-insensitively, so compare
+    # names that way too.
+    current = {f.field_id: f for f in table.schema().fields}
+    current_names = {f.name.casefold() for f in current.values()}
+    if len(current_names) != len(current):
+        return False
+    for schema in table.metadata.schemas:
+        for field in schema.fields:
+            now = current.get(field.field_id)
+            if now is None:
+                if field.name.casefold() in current_names:
+                    return False  # dropped, then the name was reused
+            elif now.name != field.name or now.field_type != field.field_type:
+                return False
+    return True
+
+
+def _local_file_path(location: str) -> str | None:
+    """Turn an Iceberg data file location into a local path, or None if remote.
+
+    Handles ``file:///abs``, ``file://C:/abs`` (the form Hyouka writes on
+    Windows), and bare paths. Returns None if the file is not on this machine.
+    """
+    if location.startswith("file:"):
+        path = location[len("file:") :]
+        if path.startswith("//"):
+            path = path[2:]
+        # file:///C:/x -> /C:/x -> C:/x
+        if len(path) > 2 and path[0] == "/" and path[2] == ":":
+            path = path[1:]
+    elif "://" in location:
+        return None
+    else:
+        path = location
+    return path if os.path.isfile(path) else None
 
 
 def _rewrite_table_names(query: str, upstreams: list[str]) -> str:
