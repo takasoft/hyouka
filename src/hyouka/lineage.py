@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 
 import pyarrow as pa
 
-INPUT_SNAPSHOT_COL = "_floe_input_snapshot_id"
-JOB_RUN_ID_COL = "_floe_job_run_id"
-PROCESSED_AT_COL = "_floe_processed_at"
-REFRESH_MODE_COL = "_floe_refresh_mode"
+INPUT_SNAPSHOT_COL = "_hyouka_input_snapshot_id"
+JOB_RUN_ID_COL = "_hyouka_job_run_id"
+PROCESSED_AT_COL = "_hyouka_processed_at"
+REFRESH_MODE_COL = "_hyouka_refresh_mode"
 
 LINEAGE_COLUMNS = (INPUT_SNAPSHOT_COL, JOB_RUN_ID_COL, PROCESSED_AT_COL, REFRESH_MODE_COL)
 

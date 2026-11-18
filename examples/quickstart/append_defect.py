@@ -1,6 +1,6 @@
-"""Append one new defect to bronze.delivery_defects — used to test `floe watch`.
+"""Append one new defect to bronze.delivery_defects — used to test `hyouka watch`.
 
-Run from a second terminal while `floe watch` is running. The watcher
+Run from a second terminal while `hyouka watch` is running. The watcher
 should detect the new snapshot within --poll seconds and refresh all
 DITs that depend on bronze.delivery_defects (transitively).
 
@@ -18,10 +18,10 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from floe.catalog import CatalogManager
-from floe.config import FloeConfig
+from hyouka.catalog import CatalogManager
+from hyouka.config import HyoukaConfig
 
-CONFIG_PATH = Path(__file__).parent / "floe.yaml"
+CONFIG_PATH = Path(__file__).parent / "hyouka.yaml"
 
 
 def main() -> None:
@@ -29,7 +29,7 @@ def main() -> None:
     defect_id = args[0] if len(args) >= 1 else f"F{int(time.time()) % 1_000_000:06d}"
     delivery_id = args[1] if len(args) >= 2 else "D023"
 
-    config = FloeConfig.load(CONFIG_PATH)
+    config = HyoukaConfig.load(CONFIG_PATH)
     mgr = CatalogManager.from_config(
         name=config.project,
         catalog_type=config.catalog.type,

@@ -1,9 +1,9 @@
 """DuckDB refresh executor — runs DIT queries via DuckDB and writes to Iceberg.
 
-This is Floe's default compute engine. It implements the structural ``Executor``
-interface (see :mod:`floe.engine`): ``refresh(dit, *, force=False) -> RefreshResult``.
+This is Hyouka's default compute engine. It implements the structural ``Executor``
+interface (see :mod:`hyouka.engine`): ``refresh(dit, *, force=False) -> RefreshResult``.
 An alternative ``flink`` engine implementing the same interface lives in
-:mod:`floe.flink_executor`; the engine in use is selected by ``compute.engine``.
+:mod:`hyouka.flink_executor`; the engine in use is selected by ``compute.engine``.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ import duckdb
 import pyarrow as pa
 from pyiceberg.expressions import GreaterThanOrEqual
 
-from floe.catalog import CatalogManager
-from floe.lineage import LINEAGE_COLUMNS, inject_lineage, new_job_run_id
-from floe.models import DynamicTable, RefreshResult
+from hyouka.catalog import CatalogManager
+from hyouka.lineage import LINEAGE_COLUMNS, inject_lineage, new_job_run_id
+from hyouka.models import DynamicTable, RefreshResult
 
 
 class DuckDBExecutor:
@@ -267,7 +267,7 @@ class DuckDBExecutor:
             if window_filter is not None and window_filter[1] is not None:
                 col, cutoff = window_filter
                 rewritten = (
-                    f"SELECT * FROM ({rewritten.rstrip(';').strip()}) AS _floe_inner "
+                    f"SELECT * FROM ({rewritten.rstrip(';').strip()}) AS _hyouka_inner "
                     f"WHERE {col} >= DATE '{cutoff.isoformat()}'"
                 )
 

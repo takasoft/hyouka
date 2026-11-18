@@ -1,4 +1,4 @@
-# VHS recording for the Floe watcher dashboard.
+# VHS recording for the Hyouka watcher dashboard.
 #
 # Renders to examples/quickstart/demo.gif. Run from the repo root with:
 #   vhs examples/quickstart/demo.tape
@@ -6,7 +6,7 @@
 # Prereq (Linux/macOS): VHS, ttyd, ffmpeg installed; quickstart catalog bootstrapped:
 #   python -m venv .venv && source .venv/bin/activate
 #   pip install -e ".[dev]"
-#   cd examples/quickstart && python seed_sources.py && floe apply
+#   cd examples/quickstart && python seed_sources.py && hyouka apply
 #
 # Note: record on Linux/macOS — VHS on Windows cannot activate the venv mid-session.
 

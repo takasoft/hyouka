@@ -1,11 +1,11 @@
 """Engine selection — map ``compute.engine`` to a refresh ``Executor``.
 
-Floe separates two concerns:
+Hyouka separates two concerns:
 
 * **Engine** — *who* runs a transformation. Implementations satisfy the
   :class:`Executor` protocol (``refresh(dit, *, force=False) -> RefreshResult``):
-  :class:`floe.executor.DuckDBExecutor` (default, in-process batch) and
-  :class:`floe.flink_executor.FlinkExecutor` (submits SQL to a Flink cluster).
+  :class:`hyouka.executor.DuckDBExecutor` (default, in-process batch) and
+  :class:`hyouka.flink_executor.FlinkExecutor` (submits SQL to a Flink cluster).
 * **Trigger** — *how* a refresh is initiated (poll vs push). That axis lives in
   the watcher/runner, not here.
 
@@ -18,11 +18,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from floe.models import DynamicTable, RefreshResult
+from hyouka.models import DynamicTable, RefreshResult
 
 if TYPE_CHECKING:
-    from floe.catalog import CatalogManager
-    from floe.config import FloeConfig
+    from hyouka.catalog import CatalogManager
+    from hyouka.config import HyoukaConfig
 
 
 @runtime_checkable
@@ -33,7 +33,7 @@ class Executor(Protocol):
 
 
 def make_executor(
-    config: FloeConfig,
+    config: HyoukaConfig,
     catalog_mgr: CatalogManager,
     dits: dict[str, DynamicTable],
 ) -> Executor:
@@ -44,11 +44,11 @@ def make_executor(
     """
     engine = config.compute.engine
     if engine == "duckdb":
-        from floe.executor import DuckDBExecutor
+        from hyouka.executor import DuckDBExecutor
 
         return DuckDBExecutor(catalog_mgr, dits)
     if engine == "flink":
-        from floe.flink_executor import FlinkExecutor
+        from hyouka.flink_executor import FlinkExecutor
 
         return FlinkExecutor(config, catalog_mgr, dits)
     # config validation should prevent reaching here.

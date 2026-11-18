@@ -1,4 +1,4 @@
-"""Catalog manager — wraps PyIceberg with Floe-specific operations."""
+"""Catalog manager — wraps PyIceberg with Hyouka-specific operations."""
 
 from __future__ import annotations
 
@@ -13,14 +13,14 @@ from pyiceberg.schema import Schema
 from pyiceberg.table import Table
 from pyiceberg.transforms import IdentityTransform
 
-CHECKPOINT_PROPERTY = "floe.last_processed_snapshot_id"
-UPSTREAM_CHECKPOINTS_PROPERTY = "floe.last_processed_snapshots"
-SOURCE_TABLE_PROPERTY = "floe.source_table"
-WINDOW_REFRESHED_AT_PROPERTY = "floe.window_last_refreshed_at"
+CHECKPOINT_PROPERTY = "hyouka.last_processed_snapshot_id"
+UPSTREAM_CHECKPOINTS_PROPERTY = "hyouka.last_processed_snapshots"
+SOURCE_TABLE_PROPERTY = "hyouka.source_table"
+WINDOW_REFRESHED_AT_PROPERTY = "hyouka.window_last_refreshed_at"
 
 
 class CatalogManager:
-    """Wraps an Iceberg catalog with Floe-specific helpers."""
+    """Wraps an Iceberg catalog with Hyouka-specific helpers."""
 
     def __init__(self, catalog: Catalog):
         self._catalog = catalog
@@ -143,7 +143,7 @@ class CatalogManager:
         Unlike :meth:`get_checkpoint` (which tracks only the primary upstream),
         this captures *every* upstream so the executor can detect changes to any
         of them — e.g. a late-arriving defect appended to a secondary upstream.
-        Returns ``None`` if the table has never been refreshed by Floe.
+        Returns ``None`` if the table has never been refreshed by Hyouka.
         """
         table = self._catalog.load_table(name)
         val = table.properties.get(UPSTREAM_CHECKPOINTS_PROPERTY)

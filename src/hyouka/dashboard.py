@@ -1,4 +1,4 @@
-"""Rich Live dashboard for `floe watch`.
+"""Rich Live dashboard for `hyouka watch`.
 
 Renders the pipeline DAG with per-DIT status and a rolling event log,
 updated in real time as the watcher detects upstream changes and
@@ -22,9 +22,9 @@ from rich.table import Table as RichTable
 from rich.text import Text
 from rich.tree import Tree
 
-from floe.models import RefreshResult
-from floe.pipeline import Pipeline
-from floe.watcher import Watcher
+from hyouka.models import RefreshResult
+from hyouka.pipeline import Pipeline
+from hyouka.watcher import Watcher
 
 MAX_LOG_LINES = 12
 SNAPSHOT_DIGITS = 8  # show only the last N digits — full IDs are unwieldy
@@ -56,7 +56,7 @@ class TableState:
 
 
 class WatcherDashboard:
-    """Rich Live dashboard for the Floe watcher."""
+    """Rich Live dashboard for the Hyouka watcher."""
 
     def __init__(self, pipeline: Pipeline, watcher: Watcher, poll_interval: float):
         self.pipeline = pipeline
@@ -68,7 +68,7 @@ class WatcherDashboard:
         # in on_change so the UI can show "what actually landed in bronze."
         self.recent_activity: dict[str, object] = {}  # source_name -> pa.Table
         # Lineage chain (refreshed DIT -> primary upstream -> ...) built from the
-        # `_floe_input_snapshot_id` column after each successful refresh.
+        # `_hyouka_input_snapshot_id` column after each successful refresh.
         self.last_lineage_chain: list[tuple[str, int | None]] = []
         for src in pipeline.planner.external_sources():
             self.tables[src] = TableState(name=src)
@@ -100,7 +100,7 @@ class WatcherDashboard:
         if missing:
             self.log(
                 f"[yellow]warning:[/yellow] {len(missing)} DIT(s) not yet materialized — "
-                f"run `floe apply` once to bootstrap, otherwise refreshes that "
+                f"run `hyouka apply` once to bootstrap, otherwise refreshes that "
                 f"depend on them will fail."
             )
 
@@ -208,7 +208,7 @@ class WatcherDashboard:
     def _build_lineage_chain(self, dit_name: str) -> list[tuple[str, int | None]]:
         """Trace where the latest row of ``dit_name`` came from.
 
-        Walks the primary-upstream chain, reading the ``_floe_input_snapshot_id``
+        Walks the primary-upstream chain, reading the ``_hyouka_input_snapshot_id``
         column at each hop until it reaches an external source (which has no
         lineage column). Returns ``[(table, snapshot_id), ...]`` from the
         refreshed DIT down to its bronze root. Returns ``[]`` if any read fails.
@@ -240,9 +240,9 @@ class WatcherDashboard:
                 if current not in self.pipeline.dits:
                     break
                 arrow = ib_table.scan().to_arrow()
-                if arrow.num_rows == 0 or "_floe_input_snapshot_id" not in arrow.column_names:
+                if arrow.num_rows == 0 or "_hyouka_input_snapshot_id" not in arrow.column_names:
                     break
-                input_snap = arrow["_floe_input_snapshot_id"][-1].as_py()
+                input_snap = arrow["_hyouka_input_snapshot_id"][-1].as_py()
                 upstreams = self.pipeline.dits[current].upstream_tables
                 if not upstreams:
                     break
@@ -260,7 +260,7 @@ class WatcherDashboard:
         n_dits = len(self.pipeline.dits)
         header = Panel(
             Text.from_markup(
-                f"[bold]Floe Watcher[/bold]  ·  "
+                f"[bold]Hyouka Watcher[/bold]  ·  "
                 f"polling every {self.poll_interval}s  ·  "
                 f"watching {n_sources} sources, {n_dits} DITs  ·  "
                 f"[dim]Ctrl+C to stop[/dim]"

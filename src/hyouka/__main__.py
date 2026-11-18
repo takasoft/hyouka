@@ -1,4 +1,4 @@
-from floe.cli import app
+from hyouka.cli import app
 
 if __name__ == "__main__":
     app()

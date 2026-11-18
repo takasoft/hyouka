@@ -8,21 +8,21 @@ from __future__ import annotations
 
 import pytest
 
-from floe.config import CatalogConfig, ComputeConfig, FloeConfig
-from floe.engine import Executor, make_executor
-from floe.executor import DuckDBExecutor
-from floe.flink_executor import FlinkExecutor, StreamingNotSupportedError
-from floe.lineage import LINEAGE_COLUMNS
-from floe.models import DynamicTable
+from hyouka.config import CatalogConfig, ComputeConfig, HyoukaConfig
+from hyouka.engine import Executor, make_executor
+from hyouka.executor import DuckDBExecutor
+from hyouka.flink_executor import FlinkExecutor, StreamingNotSupportedError
+from hyouka.lineage import LINEAGE_COLUMNS
+from hyouka.models import DynamicTable
 
 
-def _flink_config() -> FloeConfig:
-    return FloeConfig(
+def _flink_config() -> HyoukaConfig:
+    return HyoukaConfig(
         project="quickstart",
         catalog=CatalogConfig(
             type="sql",
-            uri="postgresql+psycopg2://floe:secret@postgres:5432/floe",
-            warehouse="s3://floe-warehouse/wh",
+            uri="postgresql+psycopg2://hyouka:secret@postgres:5432/hyouka",
+            warehouse="s3://hyouka-warehouse/wh",
             properties={
                 "s3.endpoint": "http://minio:9000",
                 "s3.access-key-id": "a",
@@ -33,8 +33,8 @@ def _flink_config() -> FloeConfig:
     )
 
 
-def test_make_executor_returns_duckdb(floe_config, catalog_mgr):
-    ex = make_executor(floe_config, catalog_mgr, {})
+def test_make_executor_returns_duckdb(hyouka_config, catalog_mgr):
+    ex = make_executor(hyouka_config, catalog_mgr, {})
     assert isinstance(ex, DuckDBExecutor)
     assert isinstance(ex, Executor)
 
@@ -76,8 +76,8 @@ def test_flink_create_catalog_statement(catalog_mgr):
     stmt = ex._create_catalog_statement("quickstart")
     assert "CREATE CATALOG `quickstart`" in stmt
     assert "'catalog-impl' = 'org.apache.iceberg.jdbc.JdbcCatalog'" in stmt
-    assert "'uri' = 'jdbc:postgresql://postgres:5432/floe'" in stmt
-    assert "'warehouse' = 's3://floe-warehouse/wh'" in stmt
+    assert "'uri' = 'jdbc:postgresql://postgres:5432/hyouka'" in stmt
+    assert "'warehouse' = 's3://hyouka-warehouse/wh'" in stmt
     assert "'s3.endpoint' = 'http://minio:9000'" in stmt
 
 

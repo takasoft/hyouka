@@ -1,4 +1,4 @@
-"""Parser for Floe DIT (CREATE DYNAMIC TABLE) SQL files."""
+"""Parser for Hyouka DIT (CREATE DYNAMIC TABLE) SQL files."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlglot
 from sqlglot import exp
 
-from floe.models import DynamicTable, RefreshMode
+from hyouka.models import DynamicTable, RefreshMode
 
 _OUTER_RE = re.compile(
     r"""

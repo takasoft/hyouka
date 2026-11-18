@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 #
-# Flink image for Floe's experimental "same Iceberg tables, different engine"
+# Flink image for Hyouka's experimental "same Iceberg tables, different engine"
 # profile. It is a stock Apache Flink image with three jars added to the
-# classpath so Flink SQL can talk to Floe's catalog and warehouse:
+# classpath so Flink SQL can talk to Hyouka's catalog and warehouse:
 #
 #   - iceberg-flink-runtime : the Iceberg <-> Flink SQL connector
 #   - iceberg-aws-bundle    : Iceberg S3FileIO + bundled AWS SDK (for MinIO)
@@ -46,11 +46,11 @@ RUN set -eux; \
     curl -fSL -o "flink-shaded-hadoop-2-uber-${HADOOP_UBER_VERSION}.jar" \
       "${MAVEN}/org/apache/flink/flink-shaded-hadoop-2-uber/${HADOOP_UBER_VERSION}/flink-shaded-hadoop-2-uber-${HADOOP_UBER_VERSION}.jar"
 
-COPY demo.sql /opt/floe/demo.sql
-COPY run-demo.sh /opt/floe/run-demo.sh
+COPY demo.sql /opt/hyouka/demo.sql
+COPY run-demo.sh /opt/hyouka/run-demo.sh
 # Normalize line endings (the build context may come from a Windows checkout) and
 # make the entry point executable, so the container shebang never sees a stray CR.
-RUN sed -i 's/\r$//' /opt/floe/run-demo.sh /opt/floe/demo.sql \
-    && chmod +x /opt/floe/run-demo.sh
+RUN sed -i 's/\r$//' /opt/hyouka/run-demo.sh /opt/hyouka/demo.sql \
+    && chmod +x /opt/hyouka/run-demo.sh
 
 USER flink

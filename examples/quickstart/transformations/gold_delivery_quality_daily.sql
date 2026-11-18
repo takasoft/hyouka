@@ -1,10 +1,10 @@
 -- gold.delivery_quality_daily
--- Per-day defect rate, per region/station. Demonstrates Floe's sliding-window
+-- Per-day defect rate, per region/station. Demonstrates Hyouka's sliding-window
 -- freshness contract: only the last 14 day-partitions are kept fresh, and they
 -- must be re-touched at most every 2 days.
 --
 -- Defect data trickles in late (a delivery on day-7 might receive a complaint
--- on day-0). Floe re-runs the in-window partitions when either:
+-- on day-0). Hyouka re-runs the in-window partitions when either:
 --   1. Upstream commits arrive (defects, deliveries), OR
 --   2. The freshness deadline lapses (PARTITION_FRESHNESS = 2 days).
 --

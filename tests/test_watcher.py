@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from floe.models import DynamicTable
-from floe.planner import DAGPlanner
-from floe.watcher import WatchConfig, Watcher
+from hyouka.models import DynamicTable
+from hyouka.planner import DAGPlanner
+from hyouka.watcher import WatchConfig, Watcher
 
 
 def _dit(name: str, upstream: list[str]) -> DynamicTable:

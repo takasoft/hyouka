@@ -2,8 +2,8 @@
 
 import pytest
 
-from floe.models import RefreshMode
-from floe.parser import extract_upstream_tables, parse_dit_sql
+from hyouka.models import RefreshMode
+from hyouka.parser import extract_upstream_tables, parse_dit_sql
 
 
 def test_parse_minimal_dit():

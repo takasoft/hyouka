@@ -2,7 +2,7 @@
 
 import pyarrow as pa
 
-from floe.lineage import (
+from hyouka.lineage import (
     INPUT_SNAPSHOT_COL,
     JOB_RUN_ID_COL,
     LINEAGE_COLUMNS,

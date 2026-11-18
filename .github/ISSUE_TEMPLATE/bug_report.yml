@@ -13,7 +13,7 @@ body:
     attributes:
       label: What happened?
       description: A clear and concise description of the bug.
-      placeholder: When I run `floe apply`, ...
+      placeholder: When I run `hyouka apply`, ...
     validations:
       required: true
   - type: textarea
@@ -29,7 +29,7 @@ body:
       description: A minimal sequence of commands or a small config that triggers the bug.
       placeholder: |
         1. Define a table with ...
-        2. Run `floe ...`
+        2. Run `hyouka ...`
         3. See error
     validations:
       required: true
@@ -40,10 +40,10 @@ body:
       description: Paste any error output or stack trace. This is automatically formatted as code.
       render: shell
   - type: input
-    id: floe-version
+    id: hyouka-version
     attributes:
-      label: Floe version
-      description: Output of `floe version`.
+      label: Hyouka version
+      description: Output of `hyouka version`.
       placeholder: 0.1.0
     validations:
       required: true

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import networkx as nx
 
-from floe.models import DynamicTable
+from hyouka.models import DynamicTable
 
 
 class DAGPlanner:
@@ -24,7 +24,7 @@ class DAGPlanner:
 
         for d in dits:
             for upstream in d.upstream_tables:
-                # Only add edges for upstream tables managed by Floe;
+                # Only add edges for upstream tables managed by Hyouka;
                 # external sources are leaves we don't draw edges to.
                 if upstream in names:
                     g.add_edge(upstream, d.name)
