@@ -3,7 +3,7 @@ version: "1.0"
 
 catalog:
   type: sql
-  uri: sqlite:///./.floe/catalog.db
+  uri: sqlite:///./.hyouka/catalog.db
   warehouse: ./warehouse
 
 compute:

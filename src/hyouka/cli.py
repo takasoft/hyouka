@@ -1,4 +1,4 @@
-"""Floe CLI — `floe init`, `floe plan`, `floe apply`, `floe refresh`, `floe status`."""
+"""Hyouka CLI — `hyouka init`, `hyouka plan`, `hyouka apply`, `hyouka refresh`, `hyouka status`."""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ import typer
 from rich.console import Console
 from rich.table import Table as RichTable
 
-from floe.pipeline import Pipeline
+from hyouka.pipeline import Pipeline
 
 app = typer.Typer(
-    name="floe",
-    help="Floe — declarative lakehouse engine on Apache Iceberg.",
+    name="hyouka",
+    help="Hyouka — declarative lakehouse engine on Apache Iceberg.",
     no_args_is_help=True,
 )
 console = Console()
 
-DEFAULT_CONFIG = "floe.yaml"
+DEFAULT_CONFIG = "hyouka.yaml"
 
 
 @app.command()
@@ -25,7 +25,7 @@ def init(
     project_name: str = typer.Argument(..., help="Project name"),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Where to scaffold"),
 ):
-    """Scaffold a new Floe project in the given directory."""
+    """Scaffold a new Hyouka project in the given directory."""
     target = path / project_name
     if target.exists() and any(target.iterdir()):
         console.print(f"[red]Error:[/red] {target} already exists and is not empty")
@@ -34,13 +34,13 @@ def init(
     (target / "transformations").mkdir(exist_ok=True)
     (target / "warehouse").mkdir(exist_ok=True)
 
-    (target / "floe.yaml").write_text(
+    (target / "hyouka.yaml").write_text(
         f"""project: {project_name}
 version: "1.0"
 
 catalog:
   type: sql
-  uri: sqlite:///./.floe/catalog.db
+  uri: sqlite:///./.hyouka/catalog.db
   warehouse: ./warehouse
 
 compute:
@@ -56,12 +56,12 @@ transformations_dir: transformations
         encoding="utf-8",
     )
 
-    console.print(f"[green]Created Floe project at {target}[/green]")
+    console.print(f"[green]Created Hyouka project at {target}[/green]")
     console.print("Next steps:")
     console.print(f"  cd {target}")
     console.print("  # Add .sql files under transformations/")
-    console.print("  floe plan")
-    console.print("  floe apply")
+    console.print("  hyouka plan")
+    console.print("  hyouka apply")
 
 
 @app.command()
@@ -183,7 +183,7 @@ def watch(
     and a rolling event log. Use --no-ui for plain log-only output (useful
     in headless environments).
     """
-    from floe.watcher import WatchConfig, Watcher
+    from hyouka.watcher import WatchConfig, Watcher
 
     pipeline = Pipeline.from_config(config)
 
@@ -203,7 +203,7 @@ def watch(
     watcher = Watcher(pipeline, cfg)
 
     if ui:
-        from floe.dashboard import run_dashboard
+        from hyouka.dashboard import run_dashboard
 
         run_dashboard(pipeline, watcher, poll_interval)
     else:
@@ -229,7 +229,7 @@ def _run_push(pipeline: Pipeline) -> None:
     import signal
     import threading
 
-    from floe.flink_executor import StreamHandle, StreamingNotSupportedError
+    from hyouka.flink_executor import StreamHandle, StreamingNotSupportedError
 
     executor = pipeline.executor
     if not hasattr(executor, "start_stream"):
@@ -290,10 +290,10 @@ def _run_push(pipeline: Pipeline) -> None:
 
 @app.command()
 def version():
-    """Print the Floe version."""
-    from floe import __version__
+    """Print the Hyouka version."""
+    from hyouka import __version__
 
-    console.print(f"floe {__version__}")
+    console.print(f"hyouka {__version__}")
 
 
 if __name__ == "__main__":

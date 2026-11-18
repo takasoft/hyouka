@@ -14,7 +14,7 @@ dist/
 
 # Local catalog/warehouse state (regenerated inside containers)
 **/warehouse/
-**/.floe/
+**/.hyouka/
 
 # Demo recording artifacts
 *.gif

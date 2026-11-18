@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Floe is pre-1.0 and under active development. Security fixes are applied to the
+Hyouka is pre-1.0 and under active development. Security fixes are applied to the
 latest released minor version on the `main` branch. Older versions are not
 maintained.
 
@@ -19,7 +19,7 @@ discussions, or pull requests.
 Instead, report them privately through GitHub's built-in private vulnerability
 reporting:
 
-1. Go to the [Security tab](https://github.com/takasoft/floe/security) of the
+1. Go to the [Security tab](https://github.com/takasoft/hyouka/security) of the
    repository.
 2. Click **Report a vulnerability** to open a private advisory.
 
@@ -34,4 +34,4 @@ You can expect an initial acknowledgement within a few days. We will keep you
 informed as we investigate and work on a fix, and we will credit you in the
 release notes unless you ask us not to.
 
-Thank you for helping keep Floe and its users safe.
+Thank you for helping keep Hyouka and its users safe.

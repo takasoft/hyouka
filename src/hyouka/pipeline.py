@@ -1,23 +1,23 @@
-"""Pipeline orchestration — top-level Floe entry point."""
+"""Pipeline orchestration — top-level Hyouka entry point."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from floe.catalog import CatalogManager
-from floe.config import FloeConfig
-from floe.engine import Executor, make_executor
-from floe.models import DynamicTable, RefreshResult
-from floe.parser import load_dits
-from floe.planner import DAGPlanner
+from hyouka.catalog import CatalogManager
+from hyouka.config import HyoukaConfig
+from hyouka.engine import Executor, make_executor
+from hyouka.models import DynamicTable, RefreshResult
+from hyouka.parser import load_dits
+from hyouka.planner import DAGPlanner
 
 
 class Pipeline:
-    """A Floe pipeline — config + DITs + planner + executor."""
+    """A Hyouka pipeline — config + DITs + planner + executor."""
 
     def __init__(
         self,
-        config: FloeConfig,
+        config: HyoukaConfig,
         dits: list[DynamicTable],
         catalog_mgr: CatalogManager,
     ):
@@ -29,7 +29,7 @@ class Pipeline:
 
     @classmethod
     def from_config(cls, config_path: str | Path) -> Pipeline:
-        config = FloeConfig.load(config_path)
+        config = HyoukaConfig.load(config_path)
         dits = load_dits(config.resolved_transformations_dir())
         catalog_mgr = CatalogManager.from_config(
             name=config.project,

@@ -5,9 +5,9 @@ from types import SimpleNamespace
 import pyarrow as pa
 import pytest
 
-from floe.executor import DuckDBExecutor
-from floe.parser import parse_dit_sql
-from floe.pipeline import Pipeline
+from hyouka.executor import DuckDBExecutor
+from hyouka.parser import parse_dit_sql
+from hyouka.pipeline import Pipeline
 
 
 @pytest.mark.parametrize("modern", [True, False])
@@ -20,7 +20,7 @@ def test_arrow_result_api(monkeypatch, catalog_mgr, modern):
         connection.to_arrow_table = lambda: expected
     else:
         connection.fetch_arrow_table = lambda: expected
-    monkeypatch.setattr("floe.executor.duckdb.connect", lambda _: connection)
+    monkeypatch.setattr("hyouka.executor.duckdb.connect", lambda _: connection)
     executor = DuckDBExecutor(catalog_mgr, {})
     dit = parse_dit_sql(
         "CREATE DYNAMIC TABLE silver.constant REFRESH_MODE = 'FULL' AS SELECT 1 AS value"
@@ -29,7 +29,7 @@ def test_arrow_result_api(monkeypatch, catalog_mgr, modern):
 
 
 def test_never_written_source_keeps_schema_through_two_hops(
-    floe_config, catalog_mgr, sample_orders
+    hyouka_config, catalog_mgr, sample_orders
 ):
     catalog_mgr.ensure_namespace("bronze")
     source = catalog_mgr.catalog.create_table("bronze.orders", schema=sample_orders.schema)
@@ -42,7 +42,7 @@ def test_never_written_source_keeps_schema_through_two_hops(
             "AS SELECT COUNT(*) AS n FROM silver.orders"
         ),
     ]
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
     results = pipeline.refresh_all()
     assert [r.rows_written for r in results] == [0, 1]
     silver = catalog_mgr.load_table("silver.orders").scan().to_arrow()

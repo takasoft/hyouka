@@ -1,4 +1,4 @@
-"""End-to-end Floe watcher demo for the README GIF.
+"""End-to-end Hyouka watcher demo for the README GIF.
 
 Starts the Rich dashboard, then fires append scripts in a background thread
 so the watcher detects two distinct upstream changes and the dashboard
@@ -18,7 +18,7 @@ Used by ``examples/quickstart/demo.tape`` to generate the README GIF via
 VHS (https://github.com/charmbracelet/vhs).
 
 Prerequisite: the catalog must already be bootstrapped:
-    python seed_sources.py && floe apply
+    python seed_sources.py && hyouka apply
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 
-from floe.dashboard import run_dashboard  # noqa: E402
-from floe.pipeline import Pipeline  # noqa: E402
-from floe.watcher import WatchConfig, Watcher  # noqa: E402
+from hyouka.dashboard import run_dashboard  # noqa: E402
+from hyouka.pipeline import Pipeline  # noqa: E402
+from hyouka.watcher import WatchConfig, Watcher  # noqa: E402
 
-CONFIG_PATH = HERE / "floe.yaml"
+CONFIG_PATH = HERE / "hyouka.yaml"
 
 
 def _run_append(script: str) -> None:

@@ -16,8 +16,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from floe.models import RefreshResult
-from floe.pipeline import Pipeline
+from hyouka.models import RefreshResult
+from hyouka.pipeline import Pipeline
 
 log = logging.getLogger(__name__)
 

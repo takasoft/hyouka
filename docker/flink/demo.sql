@@ -1,7 +1,7 @@
--- Floe writes plain Apache Iceberg tables, so any engine can read and transform
+-- Hyouka writes plain Apache Iceberg tables, so any engine can read and transform
 -- them. This demo runs entirely in Flink SQL against the SAME catalog and
--- warehouse that Floe (DuckDB) uses: it reads a Floe-maintained silver table and
--- writes a new gold rollup back into the catalog, which Floe can then read.
+-- warehouse that Hyouka (DuckDB) uses: it reads a Hyouka-maintained silver table and
+-- writes a new gold rollup back into the catalog, which Hyouka can then read.
 --
 -- The CREATE CATALOG / USE CATALOG statements are generated at runtime by
 -- run-demo.sh (they need the object-store credentials), so this file only
@@ -18,7 +18,7 @@ SHOW DATABASES;
 
 CREATE DATABASE IF NOT EXISTS gold;
 
--- A Flink-authored gold table living in the same Iceberg catalog as Floe's
+-- A Flink-authored gold table living in the same Iceberg catalog as Hyouka's
 -- DuckDB-authored tables. Per-DA delivery throughput and on-time rate.
 CREATE TABLE IF NOT EXISTS gold.flink_da_throughput (
     da_id        STRING,

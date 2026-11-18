@@ -1,9 +1,9 @@
-# Contributing to Floe
+# Contributing to Hyouka
 
-Thanks for your interest in improving Floe. This document explains how to set up
+Thanks for your interest in improving Hyouka. This document explains how to set up
 a development environment, run the checks, and propose changes.
 
-Floe is an early-stage but actively maintained project. Bug reports, focused pull
+Hyouka is an early-stage but actively maintained project. Bug reports, focused pull
 requests, documentation fixes, and design discussion are all welcome.
 
 ## Ways to contribute
@@ -16,15 +16,15 @@ requests, documentation fixes, and design discussion are all welcome.
 
 ## Development setup
 
-Floe targets Python 3.11+ and uses [uv](https://github.com/astral-sh/uv) for
+Hyouka targets Python 3.11+ and uses [uv](https://github.com/astral-sh/uv) for
 environment and dependency management.
 
 ```bash
 # clone your fork
-git clone https://github.com/<your-username>/floe.git
-cd floe
+git clone https://github.com/<your-username>/hyouka.git
+cd hyouka
 
-# create the virtual environment and install Floe with dev (and optional) extras
+# create the virtual environment and install Hyouka with dev (and optional) extras
 uv venv
 uv pip install -e ".[dev]"
 # or, to include the Postgres catalog driver used by the Docker setup:

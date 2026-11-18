@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from floe.catalog import CatalogManager
-from floe.executor import strip_lineage_columns
-from floe.lineage import LINEAGE_COLUMNS
-from floe.pipeline import Pipeline
+from hyouka.catalog import CatalogManager
+from hyouka.executor import strip_lineage_columns
+from hyouka.lineage import LINEAGE_COLUMNS
+from hyouka.pipeline import Pipeline
 
 
 def _seed_source_tables(
@@ -39,7 +39,7 @@ def _write_dit_file(transformations_dir: Path, name: str, sql: str):
 
 
 def test_end_to_end_simple_dit(
-    project_dir, floe_config, catalog_mgr, sample_orders, sample_customers
+    project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers
 ):
     """A single DIT joining two source tables produces correct output."""
     _seed_source_tables(catalog_mgr, sample_orders, sample_customers)
@@ -59,10 +59,10 @@ def test_end_to_end_simple_dit(
     )
 
     # Reload pipeline with the same catalog/config so the in-test catalog state is used.
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     results = pipeline.refresh_all()
     assert len(results) == 1
@@ -87,7 +87,9 @@ def test_end_to_end_simple_dit(
     assert regions == ["us-east", "us-east", "us-west"]
 
 
-def test_idempotent_refresh(project_dir, floe_config, catalog_mgr, sample_orders, sample_customers):
+def test_idempotent_refresh(
+    project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers
+):
     """Refreshing twice with no upstream changes should skip on the second run."""
     _seed_source_tables(catalog_mgr, sample_orders, sample_customers)
 
@@ -101,10 +103,10 @@ def test_idempotent_refresh(project_dir, floe_config, catalog_mgr, sample_orders
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     first = pipeline.refresh_all()[0]
     assert not first.skipped
@@ -114,7 +116,7 @@ def test_idempotent_refresh(project_dir, floe_config, catalog_mgr, sample_orders
     assert second.skip_reason == "upstream snapshot unchanged"
 
 
-def test_multi_hop_dag(project_dir, floe_config, catalog_mgr, sample_orders, sample_customers):
+def test_multi_hop_dag(project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers):
     """A two-hop pipeline (bronze → silver → gold) refreshes in correct order."""
     _seed_source_tables(catalog_mgr, sample_orders, sample_customers)
 
@@ -141,10 +143,10 @@ def test_multi_hop_dag(project_dir, floe_config, catalog_mgr, sample_orders, sam
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     order = pipeline.planner.topological_order()
     assert order.index("silver.orders") < order.index("gold.region_totals")
@@ -160,7 +162,7 @@ def test_multi_hop_dag(project_dir, floe_config, catalog_mgr, sample_orders, sam
     assert rows["us-west"] == 25.0  # order 2
 
 
-def test_partitioned_refresh_window(project_dir, floe_config, catalog_mgr):
+def test_partitioned_refresh_window(project_dir, hyouka_config, catalog_mgr):
     """Partitioned DIT with WINDOW only writes in-window partitions."""
     from datetime import datetime, timedelta
 
@@ -197,10 +199,10 @@ def test_partitioned_refresh_window(project_dir, floe_config, catalog_mgr):
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     [r] = pipeline.refresh_all()
     assert not r.skipped
@@ -213,7 +215,7 @@ def test_partitioned_refresh_window(project_dir, floe_config, catalog_mgr):
     assert max(out_dates) == today
 
 
-def test_partitioned_refresh_skip_when_fresh(project_dir, floe_config, catalog_mgr):
+def test_partitioned_refresh_skip_when_fresh(project_dir, hyouka_config, catalog_mgr):
     """A partitioned DIT skips when upstream is unchanged AND window is fresh."""
     from datetime import datetime, timedelta
 
@@ -241,10 +243,10 @@ def test_partitioned_refresh_skip_when_fresh(project_dir, floe_config, catalog_m
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     first = pipeline.refresh_all()[0]
     assert not first.skipped
@@ -255,7 +257,7 @@ def test_partitioned_refresh_skip_when_fresh(project_dir, floe_config, catalog_m
     assert "unchanged" in second.skip_reason
 
 
-def test_partitioned_refresh_replaces_only_in_window(project_dir, floe_config, catalog_mgr):
+def test_partitioned_refresh_replaces_only_in_window(project_dir, hyouka_config, catalog_mgr):
     """An older out-of-window partition written by hand is left untouched by refresh."""
     from datetime import datetime, timedelta
 
@@ -285,10 +287,10 @@ def test_partitioned_refresh_replaces_only_in_window(project_dir, floe_config, c
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
     pipeline.refresh_all()
 
     # Manually append a row OUTSIDE the 5-day window — simulating a backfill or older data.
@@ -297,10 +299,12 @@ def test_partitioned_refresh_replaces_only_in_window(project_dir, floe_config, c
         {
             "event_date": pa.array([old_date], type=pa.date32()),
             "total": pa.array([999], type=pa.int64()),
-            "_floe_input_snapshot_id": pa.array([0], type=pa.int64()),
-            "_floe_job_run_id": pa.array(["manual"], type=pa.string()),
-            "_floe_processed_at": pa.array([datetime.now(UTC)], type=pa.timestamp("us", tz="UTC")),
-            "_floe_refresh_mode": pa.array(["MANUAL"], type=pa.string()),
+            "_hyouka_input_snapshot_id": pa.array([0], type=pa.int64()),
+            "_hyouka_job_run_id": pa.array(["manual"], type=pa.string()),
+            "_hyouka_processed_at": pa.array(
+                [datetime.now(UTC)], type=pa.timestamp("us", tz="UTC")
+            ),
+            "_hyouka_refresh_mode": pa.array(["MANUAL"], type=pa.string()),
         }
     )
     catalog_mgr.load_table("gold.daily").append(out_of_window)
@@ -324,7 +328,7 @@ def test_partitioned_refresh_replaces_only_in_window(project_dir, floe_config, c
 
 
 def test_incremental_no_duplicates_on_upstream_append(
-    project_dir, floe_config, catalog_mgr, sample_orders, sample_customers
+    project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers
 ):
     """An INCREMENTAL pass-through DIT must not duplicate rows when its upstream grows.
 
@@ -346,10 +350,10 @@ def test_incremental_no_duplicates_on_upstream_append(
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     first = pipeline.refresh_all()[0]
     assert first.rows_written == 3
@@ -377,9 +381,9 @@ def test_incremental_no_duplicates_on_upstream_append(
 
 
 def test_incremental_detects_secondary_upstream_change(
-    project_dir, floe_config, catalog_mgr, sample_orders, sample_customers
+    project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers
 ):
-    """`floe apply` must refresh when a *non-primary* upstream changes.
+    """`hyouka apply` must refresh when a *non-primary* upstream changes.
 
     The primary upstream (first in the FROM clause) is unchanged here; only the
     joined `customers` table gains a row. The staleness check tracks every
@@ -400,10 +404,10 @@ def test_incremental_detects_secondary_upstream_change(
         """,
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     pipeline.refresh_all()
 
@@ -453,7 +457,7 @@ def test_incremental_detects_secondary_upstream_change(
 
 
 def test_lineage_snapshot_id_recorded(
-    project_dir, floe_config, catalog_mgr, sample_orders, sample_customers
+    project_dir, hyouka_config, catalog_mgr, sample_orders, sample_customers
 ):
     _seed_source_tables(catalog_mgr, sample_orders, sample_customers)
 
@@ -463,14 +467,14 @@ def test_lineage_snapshot_id_recorded(
         "CREATE DYNAMIC TABLE silver.orders AS SELECT order_id FROM bronze.raw_orders;",
     )
 
-    from floe.parser import load_dits
+    from hyouka.parser import load_dits
 
     dits = load_dits(project_dir / "transformations")
-    pipeline = Pipeline(floe_config, dits, catalog_mgr)
+    pipeline = Pipeline(hyouka_config, dits, catalog_mgr)
 
     bronze_snap = catalog_mgr.current_snapshot_id("bronze.raw_orders")
     pipeline.refresh_all()
 
     silver = catalog_mgr.load_table("silver.orders").scan().to_arrow()
-    snap_ids = set(silver["_floe_input_snapshot_id"].to_pylist())
+    snap_ids = set(silver["_hyouka_input_snapshot_id"].to_pylist())
     assert snap_ids == {bronze_snap}

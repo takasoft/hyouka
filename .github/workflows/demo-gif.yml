@@ -9,9 +9,9 @@ on:
       - 'examples/quickstart/demo_runner.py'
       - 'examples/quickstart/seed_sources.py'
       - 'examples/quickstart/append_defect.py'
-      - 'examples/quickstart/floe.yaml'
-      - 'src/floe/dashboard.py'
-      - 'src/floe/watcher.py'
+      - 'examples/quickstart/hyouka.yaml'
+      - 'src/hyouka/dashboard.py'
+      - 'src/hyouka/watcher.py'
 
 permissions:
   contents: write
@@ -34,7 +34,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install Floe
+      - name: Install Hyouka
         run: |
           python -m venv .venv
           source .venv/bin/activate
@@ -73,7 +73,7 @@ jobs:
         run: |
           source ../../.venv/bin/activate
           python seed_sources.py
-          floe apply
+          hyouka apply
 
       - name: Generate demo GIF
         run: |

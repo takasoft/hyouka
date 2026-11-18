@@ -1,6 +1,6 @@
-# Floe
+# Hyouka
 
-[![CI](https://github.com/takasoft/floe/actions/workflows/test.yml/badge.svg)](https://github.com/takasoft/floe/actions/workflows/test.yml)
+[![CI](https://github.com/takasoft/hyouka/actions/workflows/test.yml/badge.svg)](https://github.com/takasoft/hyouka/actions/workflows/test.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-261230.svg)](https://github.com/astral-sh/ruff)
@@ -9,15 +9,15 @@
 
 > *"Don't build the engine. Delete the engine."*
 
-> **Status: v0.1 MVP.** The declarative refresh engine and polling-based event-driven loop both work — define a derived table in SQL with partition windowing and refresh modes, run `floe watch`, and Floe keeps it fresh as its upstreams get new Iceberg snapshots. The compute engine is pluggable: DuckDB (in-process) is the default, and an opt-in Apache **Flink** engine (`compute.engine: flink`) runs on a Flink cluster, writing back to the very same Iceberg tables. The Flink engine supports both batch refresh (`trigger: poll`, unpartitioned tables) and event-driven **streaming push** (`trigger: push`, single-source append-only transforms). Data quality routing, preconditions, push-based event hooks (replacing polling), streaming aggregations and joins, partitioned Flink refresh, and multi-cloud deployment profiles are [roadmap](#10-roadmap) items (v0.2+).
+> **Status: v0.1 MVP.** The declarative refresh engine and polling-based event-driven loop both work — define a derived table in SQL with partition windowing and refresh modes, run `hyouka watch`, and Hyouka keeps it fresh as its upstreams get new Iceberg snapshots. The compute engine is pluggable: DuckDB (in-process) is the default, and an opt-in Apache **Flink** engine (`compute.engine: flink`) runs on a Flink cluster, writing back to the very same Iceberg tables. The Flink engine supports both batch refresh (`trigger: poll`, unpartitioned tables) and event-driven **streaming push** (`trigger: push`, single-source append-only transforms). Data quality routing, preconditions, push-based event hooks (replacing polling), streaming aggregations and joins, partitioned Flink refresh, and multi-cloud deployment profiles are [roadmap](#10-roadmap) items (v0.2+).
 
-![Floe watcher dashboard auto-refreshing downstream DITs as upstream Iceberg tables receive new commits](https://github.com/takasoft/floe/releases/download/demo-latest/demo.gif)
+![Hyouka watcher dashboard auto-refreshing downstream DITs as upstream Iceberg tables receive new commits](https://github.com/takasoft/hyouka/releases/download/demo-latest/demo.gif)
 
-## What Floe does, in one minute
+## What Hyouka does, in one minute
 
 You have a raw data table that keeps getting new rows — delivery events, orders, telemetry. You want a *derived* table that's a cleaned, joined, or aggregated view of it, ready for downstream consumers (analytics dashboards, ML feature pipelines, BI tools). Today, you build that by writing a custom pipeline: a Spark or Redshift script that reads the raw table, transforms it, writes the result, and runs on a schedule. Every team writes that orchestration boilerplate from scratch, for every derived table they want.
 
-Floe lets you skip the boilerplate. You declare the derived table once in SQL:
+Hyouka lets you skip the boilerplate. You declare the derived table once in SQL:
 
 ```sql
 CREATE DYNAMIC TABLE silver.orders
@@ -30,11 +30,11 @@ CREATE DYNAMIC TABLE silver.orders
   JOIN bronze.customers c ON o.customer_id = c.id;
 ```
 
-Floe builds the dependency graph between upstream and downstream tables, runs the SELECT incrementally for only the partitions that need refreshing when upstream data lands, writes the result back into Iceberg, and injects lineage columns so you can trace every row back to the upstream snapshot that produced it. No orchestration code to write per table.
+Hyouka builds the dependency graph between upstream and downstream tables, runs the SELECT incrementally for only the partitions that need refreshing when upstream data lands, writes the result back into Iceberg, and injects lineage columns so you can trace every row back to the upstream snapshot that produced it. No orchestration code to write per table.
 
 ```mermaid
 flowchart LR
-    A[("bronze.raw_orders<br/>(Iceberg)")] -->|new commit| F["Floe<br/>refresh engine"]
+    A[("bronze.raw_orders<br/>(Iceberg)")] -->|new commit| F["Hyouka<br/>refresh engine"]
     B[("bronze.customers<br/>(Iceberg)")] -->|new commit| F
     D["CREATE DYNAMIC TABLE<br/>silver.orders AS SELECT ..."] -.declares.-> F
     F -->|incremental refresh<br/>+ lineage columns| O[("silver.orders<br/>(Iceberg)")]
@@ -49,9 +49,9 @@ The vision is to bring Snowflake-style Dynamic Tables to Apache Iceberg, without
 - **Iceberg-native** — pure open table format; works with any Iceberg-compatible reader (Trino, DuckDB, Spark)
 - **Partition-windowed incremental refresh** — partitioned tables rewrite only the in-window partitions when upstreams change; unpartitioned tables recompute-and-replace idempotently (true snapshot-diff incremental is on the roadmap)
 - **Full refresh** for complete recomputes
-- **Event-driven refresh via polling** — `floe watch` keeps derived tables fresh as upstream Iceberg tables receive new snapshots
+- **Event-driven refresh via polling** — `hyouka watch` keeps derived tables fresh as upstream Iceberg tables receive new snapshots
 - **Pluggable compute engine** — refresh in-process with DuckDB (default), or run the same SQL on an Apache **Flink** cluster with `compute.engine: flink`; the Flink engine does batch refresh (`trigger: poll`, unpartitioned tables) and **streaming push** (`trigger: push`, single-source append-only transforms), writing back to the same open Iceberg tables. Engine (who computes) and trigger (how a refresh starts) are independent axes.
-- **Automatic lineage injection** — every row in a derived table carries `_floe_input_snapshot_id` and `_floe_job_run_id` columns
+- **Automatic lineage injection** — every row in a derived table carries `_hyouka_input_snapshot_id` and `_hyouka_job_run_id` columns
 - **Stateless workers** — all state lives in Iceberg snapshots; no external state stores
 
 **Roadmap (v0.2 and beyond):**
@@ -60,7 +60,7 @@ The vision is to bring Snowflake-style Dynamic Tables to Apache Iceberg, without
 - **Flink streaming beyond append-only** — streaming push already ships for single-source, append-only transforms (`trigger: push`); the roadmap adds streaming **aggregations** (upsert sink with a declared key), **multi-source joins** (stateful), partitioned/windowed streaming, and the low-latency `TRIGGERED` mode
 - **Built-in data quality** — preconditions, quarantine routing, DQ rule enforcement on every write
 - **Cloud-agnostic deployment** — packaged for AWS, Azure, GCP. (v0.1 runs against a local SQLite Iceberg catalog.)
-- **AI-native authoring** — describe a pipeline in plain English; Floe generates the SQL DDL and wires it into the DAG
+- **AI-native authoring** — describe a pipeline in plain English; Hyouka generates the SQL DDL and wires it into the DAG
 - **Local-first iteration** — build and test pipelines instantly against a small local dataset; no CDK/CloudFormation round-trip per change
 
 ---
@@ -73,13 +73,13 @@ The quickstart example ships a self-contained delivery-analytics catalog and a d
 # one-time setup
 cd examples/quickstart
 python seed_sources.py   # seeds bronze.deliveries + bronze.delivery_defects
-floe apply               # materialises all three DITs for the first time
+hyouka apply               # materialises all three DITs for the first time
 
 # watch the live dashboard
-python demo_runner.py    # starts floe watch with the Rich UI; appends data twice in the background
+python demo_runner.py    # starts hyouka watch with the Rich UI; appends data twice in the background
 ```
 
-The dashboard shows the pipeline DAG, per-table status, snapshot IDs, and a rolling event log — all updating in real time as Floe detects new Iceberg snapshots and refreshes downstream tables.
+The dashboard shows the pipeline DAG, per-table status, snapshot IDs, and a rolling event log — all updating in real time as Hyouka detects new Iceberg snapshots and refreshes downstream tables.
 
 To record a GIF of the demo (Linux/macOS, requires [VHS](https://github.com/charmbracelet/vhs)):
 
@@ -92,9 +92,9 @@ vhs examples/quickstart/demo.tape
 
 ## Run in Docker (MinIO + Postgres)
 
-The repo ships a Docker Compose stack that runs Floe as a "proper" deployment:
+The repo ships a Docker Compose stack that runs Hyouka as a "proper" deployment:
 an S3-compatible object store (MinIO) as the Iceberg warehouse, a Postgres-backed
-PyIceberg SQL catalog, and the Floe worker as a long-running container. This is the
+PyIceberg SQL catalog, and the Hyouka worker as a long-running container. This is the
 same code path as a cloud S3 + RDS deployment, just pointed at local containers.
 
 ```bash
@@ -109,24 +109,24 @@ What comes up:
 | `minio` | S3-compatible object store (warehouse); console at http://localhost:9001 |
 | `minio-init` | one-shot: creates the warehouse bucket |
 | `postgres` | backing store for the PyIceberg SQL catalog |
-| `floe-seed` | one-shot: loads the quickstart bronze tables |
-| `floe-apply` | one-shot: materialises every dynamic table |
-| `floe-watch` | long-running worker: refreshes DITs as upstreams change |
+| `hyouka-seed` | one-shot: loads the quickstart bronze tables |
+| `hyouka-apply` | one-shot: materialises every dynamic table |
+| `hyouka-watch` | long-running worker: refreshes DITs as upstreams change |
 
 The worker reacts to `SIGTERM`, so `docker compose down` shuts it down gracefully
 mid-poll rather than killing it.
 
 ### Configuration is 12-factor
 
-The image is configured entirely through `FLOE_*` environment variables (set in
+The image is configured entirely through `HYOUKA_*` environment variables (set in
 `docker-compose.yml`), so one image runs unchanged locally, in CI, or in the cloud:
 
 | Variable | Purpose |
 |----------|---------|
-| `FLOE_CATALOG_URI` | catalog connection string (e.g. `postgresql+psycopg2://…` or `sqlite:///…`) |
-| `FLOE_WAREHOUSE` | warehouse location (`s3://bucket/prefix` or a local path) |
-| `FLOE_S3_ENDPOINT` / `FLOE_S3_ACCESS_KEY_ID` / `FLOE_S3_SECRET_ACCESS_KEY` / `FLOE_S3_REGION` | object-store access |
-| `FLOE_CATALOG_PROP__<key>` | generic PyIceberg property passthrough (`__` → `.`) |
+| `HYOUKA_CATALOG_URI` | catalog connection string (e.g. `postgresql+psycopg2://…` or `sqlite:///…`) |
+| `HYOUKA_WAREHOUSE` | warehouse location (`s3://bucket/prefix` or a local path) |
+| `HYOUKA_S3_ENDPOINT` / `HYOUKA_S3_ACCESS_KEY_ID` / `HYOUKA_S3_SECRET_ACCESS_KEY` / `HYOUKA_S3_REGION` | object-store access |
+| `HYOUKA_CATALOG_PROP__<key>` | generic PyIceberg property passthrough (`__` → `.`) |
 
 > **Why Compose and not Kubernetes?** v0.1's worker is a single, uncoordinated
 > polling loop whose change-detection state lives in memory, so running multiple
@@ -136,10 +136,10 @@ The image is configured entirely through `FLOE_*` environment variables (set in
 
 ### Flink as a compute engine
 
-Floe's compute engine is pluggable. The default is **DuckDB** (in-process,
-batch). Opt into **Apache Flink** and Floe submits each table's SQL to a Flink
+Hyouka's compute engine is pluggable. The default is **DuckDB** (in-process,
+batch). Opt into **Apache Flink** and Hyouka submits each table's SQL to a Flink
 cluster over its **SQL Gateway**; Flink computes the result and writes it back
-into the **same** Iceberg catalog and warehouse Floe manages. Because Floe's
+into the **same** Iceberg catalog and warehouse Hyouka manages. Because Hyouka's
 outputs are plain, engine-agnostic Iceberg tables, either engine can read or
 refresh any table.
 
@@ -150,8 +150,8 @@ Engine (*who* computes) and trigger (*how* a refresh starts) are independent axe
 | `engine: duckdb` | ✅ default (v0.1) | — (DuckDB is batch-only) |
 | `engine: flink` | ✅ batch refresh on Flink | ✅ streaming push (append-only, single source) |
 
-Select the engine in `floe.yaml` (or via `FLOE_COMPUTE_ENGINE` /
-`FLOE_COMPUTE_TRIGGER` / `FLOE_FLINK_SQL_GATEWAY_URL`):
+Select the engine in `hyouka.yaml` (or via `HYOUKA_COMPUTE_ENGINE` /
+`HYOUKA_COMPUTE_TRIGGER` / `HYOUKA_FLINK_SQL_GATEWAY_URL`):
 
 ```yaml
 compute:
@@ -174,12 +174,12 @@ docker compose --profile flink up --build
 |---------|------|
 | `flink-jobmanager` | Flink coordinator; dashboard at http://localhost:8081 |
 | `flink-taskmanager` | Flink worker (executes the job) |
-| `flink-sql-gateway` | long-running SQL Gateway (REST on :8083); Floe's `flink` engine submits statements here |
-| `flink-sql` | one-shot interop demo: registers Floe's catalog and runs `docker/flink/demo.sql` |
+| `flink-sql-gateway` | long-running SQL Gateway (REST on :8083); Hyouka's `flink` engine submits statements here |
+| `flink-sql` | one-shot interop demo: registers Hyouka's catalog and runs `docker/flink/demo.sql` |
 
 **Scope today (batch, `poll`):** the Flink engine handles **unpartitioned**
 tables with batch (`poll`) refresh, mirroring the DuckDB engine's
-recompute-and-replace semantics and the same `_floe_*` lineage columns (it
+recompute-and-replace semantics and the same `_hyouka_*` lineage columns (it
 `INSERT OVERWRITE`s an existing table, or creates it on first run).
 Partitioned/windowed tables still use the DuckDB engine (a Flink refresh of one
 raises a clear error). Pinned versions live in `docker/flink/Dockerfile`
@@ -188,7 +188,7 @@ share the one Postgres catalog, so both engines resolve the identical tables.
 
 #### Streaming push (`trigger: push`)
 
-With `engine: flink` and `trigger: push`, `floe watch` stops polling and instead
+With `engine: flink` and `trigger: push`, `hyouka watch` stops polling and instead
 submits **one long-running Flink streaming job per table**. Each job reads its
 upstream Iceberg table as a streaming source (checking for new snapshots every
 `monitor_interval`) and appends new rows to the output as upstream commits land,
@@ -207,7 +207,7 @@ compute:
 
 ```bash
 docker compose --profile flink up -d --build          # Flink cluster + gateway
-FLOE_COMPUTE_ENGINE=flink FLOE_COMPUTE_TRIGGER=push floe watch
+HYOUKA_COMPUTE_ENGINE=flink HYOUKA_COMPUTE_TRIGGER=push hyouka watch
 # -> submits a streaming job per streamable table; watch the Flink dashboard
 #    (http://localhost:8081) for RUNNING jobs.
 ```
@@ -218,11 +218,11 @@ aggregate (`GROUP BY` / aggregate functions), join multiple sources, or are
 partitioned raise a clear `StreamingNotSupportedError` and should use
 `trigger: poll`. Streaming aggregation needs an upsert sink with a declared key,
 and multi-source streaming needs stateful joins; both are on the roadmap. The
-output carries the same `_floe_*` lineage columns as the batch path (with a NULL
+output carries the same `_hyouka_*` lineage columns as the batch path (with a NULL
 input-snapshot id, since a streaming job consumes a continuous series of commits
 rather than one snapshot). The streaming source starts from the latest snapshot
 at submission, so it reacts only to **new** upstream commits (no backfill or
-double-count); to also backfill existing rows, run a one-shot batch `floe refresh`
+double-count); to also backfill existing rows, run a one-shot batch `hyouka refresh`
 first.
 
 ### Dashboards and observability
@@ -231,14 +231,14 @@ Five web views let you watch and query the system as it runs:
 
 | What you want to see | Where | How to open |
 |----------------------|-------|-------------|
-| **Table updates in real time** (the pipeline DAG, per-table status, snapshot IDs, lineage trace, and a rolling event log) | Floe's own terminal dashboard | run `floe watch`, or `python examples/quickstart/demo_runner.py` for a scripted demo |
+| **Table updates in real time** (the pipeline DAG, per-table status, snapshot IDs, lineage trace, and a rolling event log) | Hyouka's own terminal dashboard | run `hyouka watch`, or `python examples/quickstart/demo_runner.py` for a scripted demo |
 | **The Iceberg warehouse** (buckets, data files, manifests, and metadata as new snapshots commit) | MinIO console | http://localhost:9001 (log in with the `.env` credentials) |
 | **Flink jobs** (operators, records in and out, backpressure, checkpoints, task slots) | Flink Web UI | http://localhost:8081 (requires the `flink` profile) |
 | **The containers themselves** (live, searchable logs and CPU / memory stats, grouped by Compose service) | Dozzle, an opt-in container UI | `docker compose --profile ui up -d dozzle`, then http://localhost:8888 |
 | **Query the tables with SQL** (ad-hoc queries, row previews, snapshot history, time travel, charts) | Metabase, an opt-in web SQL workbench backed by Trino | `docker compose --profile sql up -d`, then http://localhost:3000 (see [Inspecting a table](#inspecting-a-table)) |
 
-Start with `floe watch`: it renders the DAG and refreshes each downstream table
-live as Floe detects new upstream Iceberg snapshots (the GIF at the top of this
+Start with `hyouka watch`: it renders the DAG and refreshes each downstream table
+live as Hyouka detects new upstream Iceberg snapshots (the GIF at the top of this
 README is exactly this dashboard). The container UI is handy when you run Docker
 headless (for example Docker Engine in WSL2) and so don't have Docker Desktop's
 built-in Compose view; if you do run Docker Desktop, its Containers tab already
@@ -253,18 +253,18 @@ and snapshots physically land (MinIO is just a local stand-in for AWS S3, Azure
 ADLS, or GCS), but you cannot read a table or its history from it.
 
 To inspect a table itself, use standard Iceberg tooling rather than anything
-Floe-specific. **PyIceberg ships a `pyiceberg` CLI** (already a Floe dependency)
+Hyouka-specific. **PyIceberg ships a `pyiceberg` CLI** (already a Hyouka dependency)
 that talks to the very same catalog. Point it at the running stack from inside
 the worker container, using the values from your `.env`; the catalog name is the
-`project` from `floe.yaml` (here, `quickstart`):
+`project` from `hyouka.yaml` (here, `quickstart`):
 
 ```bash
-docker compose exec floe-watch bash      # open a shell in the worker container
+docker compose exec hyouka-watch bash      # open a shell in the worker container
 
-# inside the container, pointing pyiceberg at the same catalog Floe writes to:
+# inside the container, pointing pyiceberg at the same catalog Hyouka writes to:
 export PYICEBERG_CATALOG__QUICKSTART__TYPE=sql
-export PYICEBERG_CATALOG__QUICKSTART__URI="postgresql+psycopg2://floe:floe@postgres:5432/floe"
-export PYICEBERG_CATALOG__QUICKSTART__WAREHOUSE="s3://floe-warehouse/wh"
+export PYICEBERG_CATALOG__QUICKSTART__URI="postgresql+psycopg2://hyouka:hyouka@postgres:5432/hyouka"
+export PYICEBERG_CATALOG__QUICKSTART__WAREHOUSE="s3://hyouka-warehouse/wh"
 export PYICEBERG_CATALOG__QUICKSTART__S3__ENDPOINT="http://minio:9000"
 export PYICEBERG_CATALOG__QUICKSTART__S3__ACCESS_KEY_ID=minioadmin
 export PYICEBERG_CATALOG__QUICKSTART__S3__SECRET_ACCESS_KEY=minioadmin
@@ -280,7 +280,7 @@ snapshots (every refresh commits one), so it doubles as the table's version
 history and audit trail.
 
 For ad-hoc SQL in a browser, the optional `sql` profile starts a complete
-open-source SQL workbench over the very same tables, again with no Floe-specific
+open-source SQL workbench over the very same tables, again with no Hyouka-specific
 code: **Trino** (its Iceberg connector reads the shared Postgres catalog and
 MinIO warehouse) fronted by **Metabase** (a web SQL editor and charting UI that
 ships a Trino driver):
@@ -313,11 +313,11 @@ FOR VERSION AS OF <snapshot_id>;
 ```
 
 Trino's Iceberg connector also exposes `$history` and `$files` metadata tables.
-Prefer the terminal? **DuckDB** is already a Floe dependency and has its own
+Prefer the terminal? **DuckDB** is already a Hyouka dependency and has its own
 browser UI (`duckdb -ui`) plus an
 [`iceberg` extension](https://duckdb.org/docs/stable/extensions/iceberg). Every
 option here reads the same Iceberg metadata, so none of them needs anything
-specific to Floe.
+specific to Hyouka.
 
 ---
 
@@ -374,9 +374,9 @@ You patch each one. You add sensors. You add YAML dependency configs. You add ma
 
 ### 1.4 What if the data drove its own refresh?
 
-Floe is what happens when you stop scheduling and let the **data** trigger the work.
+Hyouka is what happens when you stop scheduling and let the **data** trigger the work.
 
-A new partition lands in `bronze.delivery_defects`? The corresponding `gold.delivery_quality_daily` partition is automatically marked stale and refreshed. A late-arriving defect for January 12? The January 12 gold partition refreshes — same code path, no special handling. A backfill? You replay the upstream snapshots; everything downstream catches up automatically. You write the SQL once, declare the freshness target, and Floe figures out the rest.
+A new partition lands in `bronze.delivery_defects`? The corresponding `gold.delivery_quality_daily` partition is automatically marked stale and refreshed. A late-arriving defect for January 12? The January 12 gold partition refreshes — same code path, no special handling. A backfill? You replay the upstream snapshots; everything downstream catches up automatically. You write the SQL once, declare the freshness target, and Hyouka figures out the rest.
 
 There is no scheduling. There is no "is the upstream fresh enough" decision in your code. The DAG knows.
 
@@ -391,25 +391,25 @@ Streaming-native lakehouses are a maturing space, but no project hits all five m
 | Flink + Iceberg (DIY) | ✅ | ✅ | ❌ | ✅ | ❌ |
 | Delta Live Tables | ✅ | ❌ | ✅ | ❌ (Databricks only) | ❌ |
 | Snowflake Dynamic Tables | ✅ | ❌ | ✅ | ❌ (Snowflake only) | ❌ |
-| **Floe** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Hyouka** | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-No existing open-source project combines all five. Floe fills this gap.
+No existing open-source project combines all five. Hyouka fills this gap.
 
-### 1.6 What Floe is and isn't
+### 1.6 What Hyouka is and isn't
 
-Floe **is** a coordination layer for declarative pipelines on Apache Iceberg. You declare your transformations and freshness targets; Floe handles dependency resolution, incremental refresh, lineage, and data quality routing.
+Hyouka **is** a coordination layer for declarative pipelines on Apache Iceberg. You declare your transformations and freshness targets; Hyouka handles dependency resolution, incremental refresh, lineage, and data quality routing.
 
-Floe **is not**:
+Hyouka **is not**:
 
-- **A query engine.** Floe does not serve interactive SQL queries. Use Trino, DuckDB, or Spark SQL to read Floe-managed Iceberg tables.
+- **A query engine.** Hyouka does not serve interactive SQL queries. Use Trino, DuckDB, or Spark SQL to read Hyouka-managed Iceberg tables.
 - **A data catalog UI.** Use Apache Polaris, Project Nessie, or your cloud provider's catalog.
-- **A replacement for Kafka/Flink.** Floe is a coordination and declaration layer that orchestrates Flink jobs — it does not replace the underlying compute.
+- **A replacement for Kafka/Flink.** Hyouka is a coordination and declaration layer that orchestrates Flink jobs — it does not replace the underlying compute.
 
 ---
 
 ## 2. Inspiration: Snowflake's Architecture
 
-Floe is a direct implementation of the patterns described in Snowflake's research papers: *"Streaming Democratized"* and *"What's the Difference?"*
+Hyouka is a direct implementation of the patterns described in Snowflake's research papers: *"Streaming Democratized"* and *"What's the Difference?"*
 
 ### 2.1 Immutable Versioned Storage
 
@@ -419,7 +419,7 @@ Snowflake never modifies a file in place. Every write produces a new table versi
 - Snapshots are immutable; old snapshots enable time travel
 - Incremental scans read only the files added between two snapshot IDs: `read.option("start-snapshot-id", X)`
 
-This makes Iceberg the correct storage foundation for Floe — not Delta Lake (which has a different metadata model) and not a proprietary format.
+This makes Iceberg the correct storage foundation for Hyouka — not Delta Lake (which has a different metadata model) and not a proprietary format.
 
 ### 2.2 Query Differentiation
 
@@ -432,7 +432,7 @@ Algebraic rules apply:
 
 Compute cost scales with **change volume**, not **total data volume**.
 
-Floe implements this via Flink's incremental processing model, generating merge plans that operate on Iceberg snapshot diffs rather than full table scans.
+Hyouka implements this via Flink's incremental processing model, generating merge plans that operate on Iceberg snapshot diffs rather than full table scans.
 
 ### 2.3 Dynamic Tables
 
@@ -442,7 +442,7 @@ Snowflake's Dynamic Tables abstract away scheduling entirely:
 2. The system builds a DAG of dependencies
 3. The scheduler monitors upstream freshness and triggers refreshes only when needed
 
-Floe's **Dynamic Iceberg Tables (DITs)** are the open-source equivalent, extended with explicit data quality preconditions and quarantine routing.
+Hyouka's **Dynamic Iceberg Tables (DITs)** are the open-source equivalent, extended with explicit data quality preconditions and quarantine routing.
 
 ---
 
@@ -485,7 +485,7 @@ CREATE DYNAMIC TABLE silver.orders
 | `TRIGGERED` | Fires immediately on any upstream commit event | Sub-minute latency requirements |
 | `SCHEDULED` | Time-based (cron expression), ignores commit events | External data sources without Iceberg commits |
 
-Floe automatically degrades to `FULL` if the DAG Planner determines `INCREMENTAL` is not safe for the given query.
+Hyouka automatically degrades to `FULL` if the DAG Planner determines `INCREMENTAL` is not safe for the given query.
 
 > **v0.1 implementation:** `TRIGGERED` and `SCHEDULED` are roadmap modes. Today `INCREMENTAL` does not yet read Iceberg snapshot diffs — for *partitioned* tables it rewrites only the in-window partitions (a partition-level incremental), and for *unpartitioned* tables it recomputes the full result and replaces the table. Recompute-and-replace is idempotent for every query shape (joins, aggregations), so refreshes never duplicate or double-count rows. The snapshot-diff delta merge described above lands with the Flink compute layer in v0.2.
 
@@ -495,7 +495,7 @@ A single `LAG` value is fine for tables that are always rewritten as a whole, bu
 
 > *"Every partition for the last N days must have been recomputed within X of right now."*
 
-This pattern shows up everywhere — financial close cycles, regulatory reporting windows, late-arriving event corrections, slowly-stabilizing aggregates. Floe expresses it directly:
+This pattern shows up everywhere — financial close cycles, regulatory reporting windows, late-arriving event corrections, slowly-stabilizing aggregates. Hyouka expresses it directly:
 
 ```sql
 CREATE DYNAMIC TABLE gold.delivery_quality_daily
@@ -516,7 +516,7 @@ CREATE DYNAMIC TABLE gold.delivery_quality_daily
 
 Behavior:
 
-- **Window** — at refresh time, only rows where `delivery_date >= today - 14 days` are computed and written. Partitions outside the window are never touched by Floe and remain at whatever value they had at last refresh.
+- **Window** — at refresh time, only rows where `delivery_date >= today - 14 days` are computed and written. Partitions outside the window are never touched by Hyouka and remain at whatever value they had at last refresh.
 - **Freshness** — a refresh fires when EITHER upstream changes OR `now() - last_refresh > 2 days`. The freshness clock guarantees the SLA is met even if upstream is quiet.
 - **Atomic partition replacement** — in-window partitions are overwritten in a single Iceberg commit using a `partition_col >= cutoff` filter. Older partitions are not part of the transaction.
 - **Late arrivals are free** — when a defect is filed today against a 7-day-old delivery, the next refresh of the 14-day window picks it up. No backfill script, no special-case handling.
@@ -554,7 +554,7 @@ CREATE DYNAMIC TABLE gold.weekly_scorecard
 
 ### 3.5 Data Quality Routing (Quarantine Pattern)
 
-Rather than crashing on bad data or silently dropping rows, Floe routes DQ-failed rows to a companion quarantine table. The production table only receives rows that pass all DQ checks.
+Rather than crashing on bad data or silently dropping rows, Hyouka routes DQ-failed rows to a companion quarantine table. The production table only receives rows that pass all DQ checks.
 
 ```sql
 CREATE DYNAMIC TABLE silver.payments
@@ -569,23 +569,23 @@ CREATE DYNAMIC TABLE silver.payments
   AS SELECT * FROM bronze.raw_payments;
 ```
 
-The quarantine table is a regular Iceberg table with an additional `_floe_dq_failure_reason` column. An alert fires if the quarantine write rate exceeds a configured threshold.
+The quarantine table is a regular Iceberg table with an additional `_hyouka_dq_failure_reason` column. An alert fires if the quarantine write rate exceeds a configured threshold.
 
 ### 3.6 Automatic Snapshot Lineage
 
-Every DIT write automatically injects lineage metadata columns. These are non-optional — they are how Floe guarantees auditability for payment-impacting and compliance-sensitive data.
+Every DIT write automatically injects lineage metadata columns. These are non-optional — they are how Hyouka guarantees auditability for payment-impacting and compliance-sensitive data.
 
 | Column | Description |
 |--------|-------------|
-| `_floe_input_snapshot_id` | Snapshot ID of the upstream table read during this refresh |
-| `_floe_job_run_id` | Unique ID for this specific refresh execution |
-| `_floe_processed_at` | UTC timestamp of when this row was written |
-| `_floe_refresh_mode` | `INCREMENTAL` or `FULL` — which mode was used |
+| `_hyouka_input_snapshot_id` | Snapshot ID of the upstream table read during this refresh |
+| `_hyouka_job_run_id` | Unique ID for this specific refresh execution |
+| `_hyouka_processed_at` | UTC timestamp of when this row was written |
+| `_hyouka_refresh_mode` | `INCREMENTAL` or `FULL` — which mode was used |
 
 This enables exact audit queries: *"Show me the exact upstream state that produced payment record X."*
 
 ```sql
-SELECT _floe_input_snapshot_id
+SELECT _hyouka_input_snapshot_id
 FROM silver.payments
 WHERE payment_id = 'pay_abc123';
 -- Returns: 8029341234
@@ -597,11 +597,11 @@ WHERE payment_id = 'pay_abc123';
 
 ### 3.7 The DAG
 
-Floe parses all DIT definitions in a project and builds a directed acyclic graph of table dependencies. This DAG drives:
+Hyouka parses all DIT definitions in a project and builds a directed acyclic graph of table dependencies. This DAG drives:
 
-- **Cascade scheduling** — when Table A commits, Floe knows which downstream DITs (B, C, D...) need to be evaluated
+- **Cascade scheduling** — when Table A commits, Hyouka knows which downstream DITs (B, C, D...) need to be evaluated
 - **Parallel refresh** — independent branches of the DAG refresh concurrently
-- **Cycle detection** — circular dependencies are rejected at `floe apply` time
+- **Cycle detection** — circular dependencies are rejected at `hyouka apply` time
 - **Schema change propagation** — upstream schema changes are detected before a refresh runs, not during
 
 The example pipeline in `examples/quickstart` forms the DAG below, rendered straight from the model dependencies (bronze sources flow into silver, silver into gold):
@@ -638,7 +638,7 @@ graph LR
   dp --> sd
 ```
 
-Run `floe dag` to print the same dependency graph (as ASCII) for any project.
+Run `hyouka dag` to print the same dependency graph (as ASCII) for any project.
 
 ---
 
@@ -648,7 +648,7 @@ Run `floe dag` to print the same dependency graph (as ASCII) for any project.
 
 ```mermaid
 flowchart TD
-    subgraph ControlPlane["Floe Control Plane"]
+    subgraph ControlPlane["Hyouka Control Plane"]
         DAG["DAG Planner\n─────────────\n• Parse DITs\n• Build graph\n• Plan queries\n• Cycle detect"]
         SCHED["Refresh Scheduler\n─────────────\n• Event listener\n• LAG evaluation\n• Job dispatch\n• Preconditions"]
         CAT["Catalog Manager\n─────────────\n• Table registry\n• Schema mgmt\n• Snapshot index\n• Lineage store"]
@@ -734,7 +734,7 @@ The Refresh Scheduler is the heart of the event-driven loop. It is a lightweight
 
 ### 5.3 Catalog Manager
 
-Wraps the Iceberg catalog to provide Floe-specific operations:
+Wraps the Iceberg catalog to provide Hyouka-specific operations:
 
 - Table registration and discovery
 - Schema evolution coordination (schema changes require DAG re-validation)
@@ -750,7 +750,7 @@ Wraps the Iceberg catalog to provide Floe-specific operations:
 
 ### 5.4 Event Bus (Pluggable)
 
-> **v0.1 implementation:** an in-process polling loop (`floe watch`) replaces the Event Bus. It polls every external upstream table's `current_snapshot_id` at a configurable interval and dispatches refreshes directly. The push-based design below is v0.2+.
+> **v0.1 implementation:** an in-process polling loop (`hyouka watch`) replaces the Event Bus. It polls every external upstream table's `current_snapshot_id` at a configurable interval and dispatches refreshes directly. The push-based design below is v0.2+.
 
 The Event Bus is the signal backbone. It carries `CommitEvent` messages from Iceberg writes to the Refresh Scheduler, and CDC events from source systems to ingestion workers.
 
@@ -773,12 +773,12 @@ Apache Flink is the primary compute engine. It was chosen over Spark/Glue for tw
 1. **Native streaming** — Flink is a streaming-first engine. Spark is batch-first with streaming bolted on. For low-latency `TRIGGERED` refresh modes, Flink's architecture is the correct fit.
 2. **Iceberg connector maturity** — Flink's Iceberg connector supports full read/write including streaming writes with exactly-once semantics.
 
-Flink jobs in Floe are **short-lived and stateless**:
+Flink jobs in Hyouka are **short-lived and stateless**:
 - Launched per refresh (not long-running streaming jobs, unless in `TRIGGERED` mode)
 - State lives in Iceberg, not in Flink's state backend
 - Workers are disposable — any failure simply retries from the last snapshot
 
-For `TRIGGERED` mode (sub-minute latency), Floe runs a persistent Flink streaming job that continuously reads the Iceberg change log.
+For `TRIGGERED` mode (sub-minute latency), Hyouka runs a persistent Flink streaming job that continuously reads the Iceberg change log.
 
 **Flink deployment options:**
 - Standalone (local mode, Docker Compose)
@@ -789,7 +789,7 @@ For `TRIGGERED` mode (sub-minute latency), Floe runs a persistent Flink streamin
 
 ### 5.6 Storage Layer (Apache Iceberg)
 
-Floe writes exclusively to Apache Iceberg tables. No proprietary format, no vendor lock-in.
+Hyouka writes exclusively to Apache Iceberg tables. No proprietary format, no vendor lock-in.
 
 **Why Iceberg (not Delta Lake, not Hudi, not Paimon):**
 
@@ -802,7 +802,7 @@ Floe writes exclusively to Apache Iceberg tables. No proprietary format, no vend
 | Multi-engine read support | ✅ | ✅ | Partial | Partial |
 | Schema evolution (safe) | ✅ | Partial | Partial | ✅ |
 
-Iceberg's `start-snapshot-id` / `end-snapshot-id` scan option is what makes Floe's incremental refresh mathematically exact. It is the direct equivalent of Snowflake's micro-partition diff.
+Iceberg's `start-snapshot-id` / `end-snapshot-id` scan option is what makes Hyouka's incremental refresh mathematically exact. It is the direct equivalent of Snowflake's micro-partition diff.
 
 ---
 
@@ -812,7 +812,7 @@ Iceberg's `start-snapshot-id` / `end-snapshot-id` scan option is what makes Floe
 
 ```
 my-pipeline/
-├── floe.yaml              # project config (catalog, compute, storage)
+├── hyouka.yaml              # project config (catalog, compute, storage)
 ├── sources/
 │   └── raw_orders.sql     # source table definitions
 ├── transformations/
@@ -824,20 +824,20 @@ my-pipeline/
     └── test_silver_orders.py
 ```
 
-### 6.2 Configuration: `floe.yaml`
+### 6.2 Configuration: `hyouka.yaml`
 
 ```yaml
-# The complete schema the v0.1 loader accepts (see `floe init`). Unknown
+# The complete schema the v0.1 loader accepts (see `hyouka init`). Unknown
 # keys are rejected, so this is the full surface, not a subset.
 project: my-analytics-pipeline
 version: "1.0"
 
 catalog:
   type: sql                              # PyIceberg SqlCatalog (SQLite or Postgres JDBC)
-  uri: sqlite:///./.floe/catalog.db      # local; or postgresql+psycopg2://user:pw@host:5432/db
+  uri: sqlite:///./.hyouka/catalog.db      # local; or postgresql+psycopg2://user:pw@host:5432/db
   warehouse: ./warehouse                 # local path; or s3://my-bucket/wh for object storage
   properties:                            # extra PyIceberg/FileIO props, merged verbatim
-    s3.endpoint: http://localhost:9000   # e.g. MinIO; creds can also come from FLOE_S3_* env
+    s3.endpoint: http://localhost:9000   # e.g. MinIO; creds can also come from HYOUKA_S3_* env
 
 compute:
   engine: duckdb                         # duckdb (default, in-process) | flink (submit to a Flink cluster)
@@ -846,12 +846,12 @@ compute:
 defaults:
   lag: "5 minutes"
   refresh_mode: INCREMENTAL              # INCREMENTAL | FULL
-  lineage: true                          # inject _floe_* lineage columns
+  lineage: true                          # inject _hyouka_* lineage columns
 
 transformations_dir: transformations
 ```
 
-Credentials and environment-specific locations can be injected at runtime through `FLOE_*` environment variables (12-factor), which is how the bundled Docker Compose stack points the same image at Postgres and MinIO without editing this file. Dedicated top-level `storage` and `event_bus` blocks, and a multi-engine `compute` block (`mode` / `parallelism`), are roadmap (v0.2+).
+Credentials and environment-specific locations can be injected at runtime through `HYOUKA_*` environment variables (12-factor), which is how the bundled Docker Compose stack points the same image at Postgres and MinIO without editing this file. Dedicated top-level `storage` and `event_bus` blocks, and a multi-engine `compute` block (`mode` / `parallelism`), are roadmap (v0.2+).
 
 ### 6.3 Declarative SQL DDL
 
@@ -886,12 +886,12 @@ Partition-aware options:
 
 ### 6.4 Python SDK
 
-> **v0.1 implementation:** the example below is the target SDK. Today `floe` exports `Pipeline`, `DynamicTable`, `RefreshMode`, and `RefreshResult`; the supported entry point is `Pipeline.from_config("floe.yaml")` with `.refresh_all()`, `.refresh_one(name)`, and `.status()`. The `preconditions` and `dq` helpers, `pipeline.register()` / `pipeline.apply()`, and the DQ keyword arguments shown here are roadmap (v0.2+).
+> **v0.1 implementation:** the example below is the target SDK. Today `hyouka` exports `Pipeline`, `DynamicTable`, `RefreshMode`, and `RefreshResult`; the supported entry point is `Pipeline.from_config("hyouka.yaml")` with `.refresh_all()`, `.refresh_one(name)`, and `.status()`. The `preconditions` and `dq` helpers, `pipeline.register()` / `pipeline.apply()`, and the DQ keyword arguments shown here are roadmap (v0.2+).
 
 ```python
-from floe import Pipeline, DynamicTable, preconditions, dq
+from hyouka import Pipeline, DynamicTable, preconditions, dq
 
-pipeline = Pipeline.from_config("floe.yaml")
+pipeline = Pipeline.from_config("hyouka.yaml")
 
 silver_orders = DynamicTable(
     name="silver.orders",
@@ -919,7 +919,7 @@ pipeline.apply()
 Custom precondition:
 
 ```python
-from floe.preconditions import precondition
+from hyouka.preconditions import precondition
 
 @precondition
 def weekly_completeness(spark, table: str, week: str) -> bool:
@@ -932,16 +932,16 @@ def weekly_completeness(spark, table: str, week: str) -> bool:
 ### 6.5 CLI
 
 ```bash
-# Shipped in v0.1. Every command accepts -c/--config (default: floe.yaml).
-floe init my-pipeline           # scaffold a new project (floe.yaml + transformations/, warehouse/)
-floe plan                       # validate DIT definitions and print the DAG
-floe apply                      # refresh every DIT once, in dependency order
-floe refresh silver.orders      # refresh a single DIT now
-floe status                     # per-table status: exists, mode, lag, snapshot, checkpoint, upstream
-floe dag                        # print the dependency DAG (ASCII)
-floe watch                      # poll upstreams; refresh dependents on change (live dashboard)
-floe watch --no-ui --poll 10    # headless: plain logs, custom poll interval (seconds)
-floe version                    # print the Floe version
+# Shipped in v0.1. Every command accepts -c/--config (default: hyouka.yaml).
+hyouka init my-pipeline           # scaffold a new project (hyouka.yaml + transformations/, warehouse/)
+hyouka plan                       # validate DIT definitions and print the DAG
+hyouka apply                      # refresh every DIT once, in dependency order
+hyouka refresh silver.orders      # refresh a single DIT now
+hyouka status                     # per-table status: exists, mode, lag, snapshot, checkpoint, upstream
+hyouka dag                        # print the dependency DAG (ASCII)
+hyouka watch                      # poll upstreams; refresh dependents on change (live dashboard)
+hyouka watch --no-ui --poll 10    # headless: plain logs, custom poll interval (seconds)
+hyouka version                    # print the Hyouka version
 ```
 
 Shadow-mode deploy and promote, backfill (`reset-checkpoint`), and `logs` are
@@ -952,26 +952,26 @@ section 8.
 
 ## 7. Deployment Modes
 
-Floe runs the same engine everywhere; only the catalog, object store, and
+Hyouka runs the same engine everywhere; only the catalog, object store, and
 event source change between environments. **7.1 (Local) is what ships
 today.** The Kubernetes and cloud profiles below are target designs tracked
 on the [roadmap](#10-roadmap) (v0.3).
 
 ### 7.1 Local (Development)
 
-Two ways to run Floe locally, both with no cloud dependencies.
+Two ways to run Hyouka locally, both with no cloud dependencies.
 
-**Plain process (no containers).** `floe init` scaffolds a project whose
-`floe.yaml` uses a SQLite Iceberg catalog and a local-filesystem warehouse, so
+**Plain process (no containers).** `hyouka init` scaffolds a project whose
+`hyouka.yaml` uses a SQLite Iceberg catalog and a local-filesystem warehouse, so
 the engine runs directly in your shell:
 
 ```bash
-pip install -e .                  # or: pip install floe
-floe init my-pipeline && cd my-pipeline
+pip install -e .                  # or: pip install hyouka
+hyouka init my-pipeline && cd my-pipeline
 # add .sql DIT definitions under transformations/
-floe plan                         # validate and show the DAG
-floe apply                        # materialise every DIT once
-floe watch                        # keep them fresh as upstreams change
+hyouka plan                         # validate and show the DAG
+hyouka apply                        # materialise every DIT once
+hyouka watch                        # keep them fresh as upstreams change
 ```
 
 **Full local stack (Docker Compose).** For a deployment that mirrors the cloud
@@ -991,8 +991,8 @@ docker compose --profile flink up           # optional: Flink on the same Iceber
 Helm chart for production deployment. Bring your own object storage and event bus.
 
 ```bash
-helm repo add floe https://charts.floe.dev
-helm install floe floe/floe -f floe-values.yaml
+helm repo add hyouka https://charts.hyouka.dev
+helm install hyouka hyouka/hyouka -f hyouka-values.yaml
 ```
 
 ### 7.3 Cloud Quick-Start Configs
@@ -1026,22 +1026,22 @@ compute:   { engine: flink, mode: dataproc }
 ## 8. Operational Patterns
 
 > **Target operational model (v0.4).** The patterns in this section describe
-> where Floe is headed. The commands and integrations they use, shadow-mode
-> `floe deploy` / `floe promote`, backfill `floe reset-checkpoint`, `floe diff`,
+> where Hyouka is headed. The commands and integrations they use, shadow-mode
+> `hyouka deploy` / `hyouka promote`, backfill `hyouka reset-checkpoint`, `hyouka diff`,
 > and the pluggable metrics backends, are on the [roadmap](#10-roadmap), not in
-> v0.1. Today, `floe status` and the `floe watch` dashboard already cover live
+> v0.1. Today, `hyouka status` and the `hyouka watch` dashboard already cover live
 > refresh health and lag.
 
 ### 8.1 Shadow Mode Migration
 
-Shadow mode enables risk-free migration from a legacy pipeline to a Floe DIT. The new pipeline runs in parallel; production traffic is only switched after validation.
+Shadow mode enables risk-free migration from a legacy pipeline to a Hyouka DIT. The new pipeline runs in parallel; production traffic is only switched after validation.
 
 ```bash
 # Deploy in shadow mode — writes to silver.orders_shadow, runs daily reconciliation
-floe deploy --shadow silver.orders
+hyouka deploy --shadow silver.orders
 
 # After N days of zero variance:
-floe promote silver.orders   # atomically swaps read pointer; legacy pipeline stops
+hyouka promote silver.orders   # atomically swaps read pointer; legacy pipeline stops
 ```
 
 Reconciliation reports: row count diff, value diff (configurable columns), latency diff.
@@ -1049,32 +1049,32 @@ Reconciliation reports: row count diff, value diff (configurable columns), laten
 ### 8.2 Backfill
 
 ```bash
-floe reset-checkpoint silver.orders --from-beginning
-floe reset-checkpoint silver.orders --from 2026-01-01
-floe reset-checkpoint silver.orders --from-snapshot 8029341234
+hyouka reset-checkpoint silver.orders --from-beginning
+hyouka reset-checkpoint silver.orders --from 2026-01-01
+hyouka reset-checkpoint silver.orders --from-snapshot 8029341234
 ```
 
 Backfill uses the exact same code path as incremental refresh — there is no separate backfill mode or job.
 
 ### 8.3 Schema Evolution
 
-Iceberg handles schema evolution natively (add column, rename column, widen type, reorder). Floe adds a guardrail:
+Iceberg handles schema evolution natively (add column, rename column, widen type, reorder). Hyouka adds a guardrail:
 
-- `floe diff` detects upstream schema changes before they propagate
+- `hyouka diff` detects upstream schema changes before they propagate
 - Breaking changes (drop column, type narrowing) block downstream DITs and alert
 - Non-breaking changes (add column, widen type) auto-propagate with a catalog version bump
 
 ### 8.4 Monitoring
 
-Floe emits structured metrics to a pluggable observability backend:
+Hyouka emits structured metrics to a pluggable observability backend:
 
 | Metric | Description |
 |--------|-------------|
-| `floe.refresh.latency_ms` | Time from CommitEvent to downstream snapshot commit |
-| `floe.refresh.lag_seconds` | Actual lag vs. configured LAG target |
-| `floe.dq.quarantine_rate` | Fraction of rows routed to quarantine |
-| `floe.precondition.skips` | Number of times a precondition blocked a refresh |
-| `floe.dag.depth` | Number of hops in the longest DAG path |
+| `hyouka.refresh.latency_ms` | Time from CommitEvent to downstream snapshot commit |
+| `hyouka.refresh.lag_seconds` | Actual lag vs. configured LAG target |
+| `hyouka.dq.quarantine_rate` | Fraction of rows routed to quarantine |
+| `hyouka.precondition.skips` | Number of times a precondition blocked a refresh |
+| `hyouka.dag.depth` | Number of hops in the longest DAG path |
 
 Supported backends: Prometheus, AWS CloudWatch, Azure Monitor, GCP Cloud Monitoring, OpenTelemetry.
 
@@ -1084,30 +1084,30 @@ Supported backends: Prometheus, AWS CloudWatch, Azure Monitor, GCP Cloud Monitor
 
 ### 9.1 vs. Snowflake Dynamic Tables
 
-| Dimension | Snowflake Dynamic Tables | Floe |
+| Dimension | Snowflake Dynamic Tables | Hyouka |
 |-----------|--------------------------|------|
 | Table format | Proprietary micro-partitions | Apache Iceberg (open) |
 | Cloud | Snowflake only | Any / local |
 | Preconditions | `TARGET_LAG` only | Full precondition DSL |
 | DQ routing | Not built-in | First-class quarantine pattern |
-| Lineage | Internal (not exported) | Explicit `_floe_*` columns in Iceberg |
+| Lineage | Internal (not exported) | Explicit `_hyouka_*` columns in Iceberg |
 | Cost model | Snowflake credits | Open source; pay for your own compute |
 
 ### 9.2 vs. Apache Paimon
 
-Paimon is the closest streaming table format with event-driven capabilities, but it uses its own storage format (LSM-tree based). Tables stored in Paimon cannot be read directly by Trino, DuckDB, or standard Iceberg readers. Floe is pure Iceberg — any Iceberg-compatible reader works.
+Paimon is the closest streaming table format with event-driven capabilities, but it uses its own storage format (LSM-tree based). Tables stored in Paimon cannot be read directly by Trino, DuckDB, or standard Iceberg readers. Hyouka is pure Iceberg — any Iceberg-compatible reader works.
 
 ### 9.3 vs. Delta Live Tables (Databricks)
 
-DLT provides a very similar declarative pipeline experience but is Databricks-exclusive. Moving off Databricks means rewriting all pipelines. Floe is vendor-neutral by design.
+DLT provides a very similar declarative pipeline experience but is Databricks-exclusive. Moving off Databricks means rewriting all pipelines. Hyouka is vendor-neutral by design.
 
 ### 9.4 vs. RisingWave
 
-RisingWave is a streaming database that can sink to Iceberg. It handles Iceberg as an output, not as the primary storage layer. Floe treats Iceberg as the system of record — both the input and the output — which enables full time-travel and snapshot lineage across the entire pipeline.
+RisingWave is a streaming database that can sink to Iceberg. It handles Iceberg as an output, not as the primary storage layer. Hyouka treats Iceberg as the system of record — both the input and the output — which enables full time-travel and snapshot lineage across the entire pipeline.
 
 ### 9.5 vs. DIY Flink + Iceberg
 
-Building the same system yourself requires writing Flink jobs per transformation, building a custom orchestration layer, implementing idempotency and checkpoint management, writing DQ routing logic per job, and building a DAG planner for multi-hop cascades. Floe replaces all of that boilerplate so engineers write only the transformation logic.
+Building the same system yourself requires writing Flink jobs per transformation, building a custom orchestration layer, implementing idempotency and checkpoint management, writing DQ routing logic per job, and building a DAG planner for multi-hop cascades. Hyouka replaces all of that boilerplate so engineers write only the transformation logic.
 
 ---
 
@@ -1120,9 +1120,9 @@ Building the same system yourself requires writing Flink jobs per transformation
 - [x] Local deployment against SQLite Iceberg catalog
 - [x] `INCREMENTAL` and `FULL` refresh modes
 - [x] Partition-aware refresh (`PARTITION BY` + `PARTITION_WINDOW` + `PARTITION_FRESHNESS`)
-- [x] Automatic `_floe_*` lineage column injection
+- [x] Automatic `_hyouka_*` lineage column injection
 - [x] CLI: `init`, `plan`, `apply`, `refresh`, `status`, `dag`, `watch`, `version`
-- [x] Polling-based event detection (`floe watch`) — push-based hooks move to v0.2
+- [x] Polling-based event detection (`hyouka watch`) — push-based hooks move to v0.2
 - [x] Docker Compose local stack (MinIO warehouse + Postgres catalog + worker; opt-in Flink, SQL-workbench, and container-UI profiles)
 
 ### v0.2 — Production Compute, Event Bus & Data Quality
@@ -1140,8 +1140,8 @@ Building the same system yourself requires writing Flink jobs per transformation
 - [ ] GCP config profile (Pub/Sub + GCS)
 
 ### v0.4 — Operations
-- [ ] Shadow mode (`floe deploy --shadow`, `floe promote`)
-- [ ] Backfill commands (`floe reset-checkpoint`)
+- [ ] Shadow mode (`hyouka deploy --shadow`, `hyouka promote`)
+- [ ] Backfill commands (`hyouka reset-checkpoint`)
 - [ ] Schema evolution guardrails
 - [ ] Prometheus / OpenTelemetry metrics
 
@@ -1205,4 +1205,4 @@ Apache 2.0
 
 ---
 
-*Floe is named for a sheet of floating ice — ice in motion. Small, flat, and fast.*
+*Hyouka (氷菓) is Japanese for an ice treat, like ice cream or a frozen dessert. It aims to be a light, easy companion to Apache Iceberg.*

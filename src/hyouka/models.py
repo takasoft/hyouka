@@ -1,4 +1,4 @@
-"""Core domain models for Floe."""
+"""Core domain models for Hyouka."""
 
 from __future__ import annotations
 

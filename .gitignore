@@ -33,7 +33,7 @@ env/
 .DS_Store
 Thumbs.db
 
-# Floe runtime
-.floe/
+# Hyouka runtime
+.hyouka/
 *.db
 warehouse/

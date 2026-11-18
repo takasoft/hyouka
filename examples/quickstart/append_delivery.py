@@ -1,6 +1,6 @@
-"""Append one new delivery to bronze.raw_deliveries — used to test `floe watch`.
+"""Append one new delivery to bronze.raw_deliveries — used to test `hyouka watch`.
 
-Run from a second terminal while `floe watch` is running. The watcher should
+Run from a second terminal while `hyouka watch` is running. The watcher should
 detect the new snapshot within --poll seconds and refresh the silver and
 gold DITs that depend on bronze.raw_deliveries (transitively):
 silver.deliveries_enriched, gold.da_daily_performance,
@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from floe.catalog import CatalogManager
-from floe.config import FloeConfig
+from hyouka.catalog import CatalogManager
+from hyouka.config import HyoukaConfig
 
-CONFIG_PATH = Path(__file__).parent / "floe.yaml"
+CONFIG_PATH = Path(__file__).parent / "hyouka.yaml"
 
 
 def main() -> None:
@@ -32,7 +32,7 @@ def main() -> None:
     da_id = args[1] if len(args) >= 2 else "DA001"
     route_id = args[2] if len(args) >= 3 else "R001"
 
-    config = FloeConfig.load(CONFIG_PATH)
+    config = HyoukaConfig.load(CONFIG_PATH)
     mgr = CatalogManager.from_config(
         name=config.project,
         catalog_type=config.catalog.type,

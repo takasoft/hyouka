@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to Floe! Please fill out the sections below.
+Thanks for contributing to Hyouka! Please fill out the sections below.
 Keep pull requests focused on a single concern so they are easy to review.
 -->
 

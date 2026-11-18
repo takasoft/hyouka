@@ -1,8 +1,8 @@
 """Flink compute engine — runs a DIT's SQL on Apache Flink, writing Iceberg.
 
-Floe's default engine is DuckDB (in-process). This engine instead submits the
+Hyouka's default engine is DuckDB (in-process). This engine instead submits the
 transformation to a Flink cluster via its **SQL Gateway** REST API, computing the
-table on Flink and writing the result back into the *same* Iceberg catalog Floe
+table on Flink and writing the result back into the *same* Iceberg catalog Hyouka
 manages. The Iceberg tables are plain and engine-agnostic, so a table can be read
 or refreshed by either engine.
 
@@ -18,7 +18,7 @@ Scope (this release): unpartitioned DITs. Two execution shapes are supported:
   Scoped to single-upstream, append-only transforms; partitioned, multi-source,
   or aggregating DITs raise :class:`StreamingNotSupportedError` (use ``poll``).
 
-The four Floe lineage columns are appended as SQL literals in both shapes so the
+The four Hyouka lineage columns are appended as SQL literals in both shapes so the
 output schema matches what the DuckDB engine produces.
 """
 
@@ -36,18 +36,18 @@ from typing import TYPE_CHECKING, Any
 import sqlglot
 from sqlglot import exp
 
-from floe.lineage import (
+from hyouka.lineage import (
     INPUT_SNAPSHOT_COL,
     JOB_RUN_ID_COL,
     PROCESSED_AT_COL,
     REFRESH_MODE_COL,
     new_job_run_id,
 )
-from floe.models import DynamicTable, RefreshResult
+from hyouka.models import DynamicTable, RefreshResult
 
 if TYPE_CHECKING:
-    from floe.catalog import CatalogManager
-    from floe.config import FloeConfig
+    from hyouka.catalog import CatalogManager
+    from hyouka.config import HyoukaConfig
 
 
 class FlinkExecutorError(RuntimeError):
@@ -175,7 +175,7 @@ class FlinkExecutor:
 
     def __init__(
         self,
-        config: FloeConfig,
+        config: HyoukaConfig,
         catalog_mgr: CatalogManager,
         all_dits: dict[str, DynamicTable],
     ):
@@ -184,7 +184,7 @@ class FlinkExecutor:
         self.all_dits = all_dits
         self.flink = config.compute.flink
         if self.flink is None:  # pragma: no cover - config guarantees this
-            from floe.config import FlinkConfig
+            from hyouka.config import FlinkConfig
 
             self.flink = FlinkConfig()
         self.client = FlinkSQLGatewayClient(self.flink.sql_gateway_url)
@@ -249,10 +249,10 @@ class FlinkExecutor:
         """Submit a long-running Flink streaming job that keeps ``dit`` fresh.
 
         This is the ``push`` trigger: rather than polling and re-running a batch
-        refresh, Floe submits one continuous Flink job that reads the upstream
+        refresh, Hyouka submits one continuous Flink job that reads the upstream
         Iceberg table as a streaming source (monitoring it every
         ``compute.flink.monitor_interval``) and appends new rows to the output as
-        upstream commits land. The job runs on the cluster independently of Floe.
+        upstream commits land. The job runs on the cluster independently of Hyouka.
 
         Scope (this release): single-upstream, append-only (no aggregation)
         transforms. Aggregating or multi-source streaming needs an upsert sink
@@ -501,7 +501,7 @@ class FlinkExecutor:
             f"  CAST(CURRENT_TIMESTAMP AS TIMESTAMP_LTZ(6)) AS {_quote_ident(PROCESSED_AT_COL)},\n"
             f"  CAST('{mode}' AS STRING) AS {_quote_ident(REFRESH_MODE_COL)}"
         )
-        return f"SELECT\n  _floe_src.*,\n  {lineage}\nFROM (\n{inner}\n) AS _floe_src"
+        return f"SELECT\n  _hyouka_src.*,\n  {lineage}\nFROM (\n{inner}\n) AS _hyouka_src"
 
     def _current_upstream_snapshots(self, dit: DynamicTable) -> dict[str, int]:
         snaps: dict[str, int] = {}

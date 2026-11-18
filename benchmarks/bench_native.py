@@ -1,11 +1,11 @@
-"""Native (no-Docker) end-to-end performance harness for Floe.
+"""Native (no-Docker) end-to-end performance harness for Hyouka.
 
 Seeds a large synthetic dataset into an isolated local SQLite catalog + on-disk
-warehouse, then runs the real Floe refresh path (PyIceberg scan -> DuckDB SQL ->
+warehouse, then runs the real Hyouka refresh path (PyIceberg scan -> DuckDB SQL ->
 Iceberg overwrite) for every dynamic table in topological order, timing each hop.
 
 This is the local counterpart to the containerized benchmark (see README.md):
-it isolates Floe's compute from object-store and Postgres latency so the numbers
+it isolates Hyouka's compute from object-store and Postgres latency so the numbers
 reflect the engine itself.
 
 Usage (from the repo root, inside the project venv):
@@ -18,8 +18,8 @@ Env knobs:
     BENCH_KEEP=1      keep the scratch catalog + warehouse after the run
 
 The synthetic data shape is controlled by the seeder's own knobs:
-    FLOE_SEED_DAYS / FLOE_SEED_DAS / FLOE_SEED_ROUTES /
-    FLOE_SEED_SAFETY_PCT / FLOE_SEED_DEFECT_PCT
+    HYOUKA_SEED_DAYS / HYOUKA_SEED_DAS / HYOUKA_SEED_ROUTES /
+    HYOUKA_SEED_SAFETY_PCT / HYOUKA_SEED_DEFECT_PCT
 """
 
 from __future__ import annotations
@@ -89,21 +89,21 @@ def fmt(n: float) -> str:
 
 def main() -> None:
     n = int(os.environ.get("BENCH_DELIVERIES", "2000000"))
-    workdir = Path(os.environ.get("BENCH_WORKDIR") or tempfile.mkdtemp(prefix="floe_bench_"))
+    workdir = Path(os.environ.get("BENCH_WORKDIR") or tempfile.mkdtemp(prefix="hyouka_bench_"))
     workdir.mkdir(parents=True, exist_ok=True)
     cat = workdir / "catalog.db"
     wh = workdir / "warehouse"
 
-    os.environ["FLOE_CATALOG_URI"] = f"sqlite:///{cat.as_posix()}"
-    os.environ["FLOE_WAREHOUSE"] = str(wh)
-    os.environ["FLOE_SEED_DELIVERIES"] = str(n)
+    os.environ["HYOUKA_CATALOG_URI"] = f"sqlite:///{cat.as_posix()}"
+    os.environ["HYOUKA_WAREHOUSE"] = str(wh)
+    os.environ["HYOUKA_SEED_DELIVERIES"] = str(n)
 
-    cfg = REPO_ROOT / "examples" / "quickstart" / "floe.yaml"
+    cfg = REPO_ROOT / "examples" / "quickstart" / "hyouka.yaml"
 
-    print("== Floe native benchmark ==")
+    print("== Hyouka native benchmark ==")
     print(f"deliveries target : {fmt(n)}")
     print(f"workdir           : {workdir}")
-    print(f"catalog           : {os.environ['FLOE_CATALOG_URI']}")
+    print(f"catalog           : {os.environ['HYOUKA_CATALOG_URI']}")
     print(f"warehouse         : {wh}")
     print()
 
@@ -114,7 +114,7 @@ def main() -> None:
     t_seed = time.perf_counter() - t0
     print(f"\nseed time         : {t_seed:7.2f}s  ({fmt(n / t_seed)} rows/s into Iceberg)\n")
 
-    from floe.pipeline import Pipeline  # noqa: E402
+    from hyouka.pipeline import Pipeline  # noqa: E402
 
     p = Pipeline.from_config(cfg)
     order = p.planner.topological_order()

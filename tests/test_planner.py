@@ -2,8 +2,8 @@
 
 import pytest
 
-from floe.models import DynamicTable
-from floe.planner import DAGPlanner
+from hyouka.models import DynamicTable
+from hyouka.planner import DAGPlanner
 
 
 def _dit(name: str, upstream: list[str]) -> DynamicTable:

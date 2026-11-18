@@ -9,7 +9,7 @@ Domain: a (fictional) last-mile delivery service. We track:
 
 Defect data trickles in late — sometimes days after the delivery itself.
 The DITs progressively refine these into per-DA, per-station, and per-region KPIs.
-The partitioned `gold.delivery_quality_daily` DIT demonstrates Floe's
+The partitioned `gold.delivery_quality_daily` DIT demonstrates Hyouka's
 sliding-window freshness contract: only the last 14 day-partitions are kept fresh.
 
 Dates are today-relative so the example always sits across the freshness window.
@@ -21,10 +21,10 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from floe.catalog import CatalogManager
-from floe.config import FloeConfig
+from hyouka.catalog import CatalogManager
+from hyouka.config import HyoukaConfig
 
-CONFIG_PATH = Path(__file__).parent / "floe.yaml"
+CONFIG_PATH = Path(__file__).parent / "hyouka.yaml"
 
 
 def _ts(d: date, hour: int, minute: int = 0) -> datetime:
@@ -50,7 +50,7 @@ def _seed_large(
 ) -> None:
     """Generate a large, FK-consistent synthetic dataset for performance testing.
 
-    Activated when ``FLOE_SEED_DELIVERIES`` is set above zero. The dimension
+    Activated when ``HYOUKA_SEED_DELIVERIES`` is set above zero. The dimension
     tables (delivery associates, routes) are small and built with PyArrow; the
     multi-million-row fact tables are generated inside DuckDB with a fixed seed
     (so runs reproduce) and the safety/defect tables are *sampled from* the
@@ -146,7 +146,7 @@ def _seed_large(
 
 
 def main():
-    config = FloeConfig.load(CONFIG_PATH)
+    config = HyoukaConfig.load(CONFIG_PATH)
     mgr = CatalogManager.from_config(
         name=config.project,
         catalog_type=config.catalog.type,
@@ -156,16 +156,16 @@ def main():
     )
     mgr.ensure_namespace("bronze")
 
-    n_deliveries = _env_int("FLOE_SEED_DELIVERIES", 0)
+    n_deliveries = _env_int("HYOUKA_SEED_DELIVERIES", 0)
     if n_deliveries > 0:
         _seed_large(
             mgr,
             n_deliveries=n_deliveries,
-            n_days=_env_int("FLOE_SEED_DAYS", 30),
-            n_das=_env_int("FLOE_SEED_DAS", 2000),
-            n_routes=_env_int("FLOE_SEED_ROUTES", 800),
-            safety_pct=_env_int("FLOE_SEED_SAFETY_PCT", 8),
-            defect_pct=_env_int("FLOE_SEED_DEFECT_PCT", 4),
+            n_days=_env_int("HYOUKA_SEED_DAYS", 30),
+            n_das=_env_int("HYOUKA_SEED_DAS", 2000),
+            n_routes=_env_int("HYOUKA_SEED_ROUTES", 800),
+            safety_pct=_env_int("HYOUKA_SEED_SAFETY_PCT", 8),
+            defect_pct=_env_int("HYOUKA_SEED_DEFECT_PCT", 4),
         )
         return
 

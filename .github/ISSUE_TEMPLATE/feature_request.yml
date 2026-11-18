@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea or enhancement for Floe
+description: Suggest an idea or enhancement for Hyouka
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -19,7 +19,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What would you like Floe to do?
+      description: What would you like Hyouka to do?
     validations:
       required: true
   - type: textarea

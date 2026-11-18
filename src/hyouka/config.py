@@ -1,4 +1,4 @@
-"""Floe project configuration loader."""
+"""Hyouka project configuration loader."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-# Compute engines Floe can run a refresh on.
+# Compute engines Hyouka can run a refresh on.
 #
 # - ``duckdb`` : the default. In-process batch recompute-and-replace (see
-#   :class:`floe.executor.DuckDBExecutor`).
+#   :class:`hyouka.executor.DuckDBExecutor`).
 # - ``flink``  : submits the DIT's SQL to an Apache Flink cluster via its SQL
 #   Gateway, computing the table on Flink and writing it back to the SAME Iceberg
-#   catalog (see :class:`floe.flink_executor.FlinkExecutor`). Opt-in; needs a
+#   catalog (see :class:`hyouka.flink_executor.FlinkExecutor`). Opt-in; needs a
 #   reachable Flink SQL Gateway (the `flink` Docker Compose profile starts one).
 SUPPORTED_COMPUTE_ENGINES = frozenset({"duckdb", "flink"})
 
@@ -32,7 +32,7 @@ class CatalogConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: str = Field(default="sql")
-    uri: str = Field(default="sqlite:///./.floe/catalog.db")
+    uri: str = Field(default="sqlite:///./.hyouka/catalog.db")
     warehouse: str = Field(default="./warehouse")
     properties: dict[str, str] = Field(
         default_factory=dict,
@@ -44,7 +44,7 @@ class CatalogConfig(BaseModel):
 class FlinkConfig(BaseModel):
     """Settings for the ``flink`` compute engine.
 
-    Connection details that Flink shares with the rest of Floe (warehouse,
+    Connection details that Flink shares with the rest of Hyouka (warehouse,
     object-store credentials, the JDBC catalog) are derived from the top-level
     ``catalog`` config, so this block only carries Flink-specific knobs plus
     optional overrides.
@@ -64,12 +64,12 @@ class FlinkConfig(BaseModel):
     catalog_name: str | None = Field(
         default=None,
         description="Flink catalog name to register. Must match the JdbcCatalog "
-        "rows PyIceberg wrote; defaults to the Floe project name.",
+        "rows PyIceberg wrote; defaults to the Hyouka project name.",
     )
     jdbc_uri: str | None = Field(
         default=None,
         description="Plain Java JDBC URI for the catalog backend (e.g. "
-        "'jdbc:postgresql://postgres:5432/floe'). Derived from catalog.uri when omitted.",
+        "'jdbc:postgresql://postgres:5432/hyouka'). Derived from catalog.uri when omitted.",
     )
     parallelism: int = Field(default=1, ge=1)
     statement_timeout_seconds: int = Field(default=300, ge=1)
@@ -138,7 +138,7 @@ class DefaultsConfig(BaseModel):
     lineage: bool = Field(default=True)
 
 
-class FloeConfig(BaseModel):
+class HyoukaConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     project: str
@@ -151,7 +151,7 @@ class FloeConfig(BaseModel):
     project_root: Path = Field(default_factory=Path.cwd, exclude=True)
 
     @classmethod
-    def load(cls, path: str | Path) -> FloeConfig:
+    def load(cls, path: str | Path) -> HyoukaConfig:
         path = Path(path).resolve()
         with open(path) as f:
             data = yaml.safe_load(f) or {}
@@ -161,46 +161,46 @@ class FloeConfig(BaseModel):
         return cfg
 
     def _apply_env_overrides(self) -> None:
-        """Override config from ``FLOE_*`` environment variables (12-factor).
+        """Override config from ``HYOUKA_*`` environment variables (12-factor).
 
         Lets a single image run unchanged across local/dev/Compose by injecting
         the catalog URI, warehouse location, and object-store credentials at
         runtime instead of baking them into the YAML. Supported keys:
 
-        - ``FLOE_PROJECT``, ``FLOE_CATALOG_TYPE``, ``FLOE_CATALOG_URI``,
-          ``FLOE_WAREHOUSE``, ``FLOE_TRANSFORMATIONS_DIR``
-        - ``FLOE_S3_ENDPOINT`` / ``FLOE_S3_ACCESS_KEY_ID`` /
-          ``FLOE_S3_SECRET_ACCESS_KEY`` / ``FLOE_S3_REGION``
-        - ``FLOE_CATALOG_PROP__<key>`` — generic passthrough; ``__`` in the key
-          becomes ``.`` (e.g. ``FLOE_CATALOG_PROP__S3__CONNECT__TIMEOUT``).
-        - ``FLOE_COMPUTE_ENGINE`` / ``FLOE_COMPUTE_TRIGGER`` — select the engine
+        - ``HYOUKA_PROJECT``, ``HYOUKA_CATALOG_TYPE``, ``HYOUKA_CATALOG_URI``,
+          ``HYOUKA_WAREHOUSE``, ``HYOUKA_TRANSFORMATIONS_DIR``
+        - ``HYOUKA_S3_ENDPOINT`` / ``HYOUKA_S3_ACCESS_KEY_ID`` /
+          ``HYOUKA_S3_SECRET_ACCESS_KEY`` / ``HYOUKA_S3_REGION``
+        - ``HYOUKA_CATALOG_PROP__<key>`` — generic passthrough; ``__`` in the key
+          becomes ``.`` (e.g. ``HYOUKA_CATALOG_PROP__S3__CONNECT__TIMEOUT``).
+        - ``HYOUKA_COMPUTE_ENGINE`` / ``HYOUKA_COMPUTE_TRIGGER`` — select the engine
           (``duckdb`` | ``flink``) and trigger (``poll`` | ``push``).
-        - ``FLOE_FLINK_SQL_GATEWAY_URL`` / ``FLOE_FLINK_JDBC_URI`` /
-          ``FLOE_FLINK_CATALOG_NAME`` — Flink engine overrides.
+        - ``HYOUKA_FLINK_SQL_GATEWAY_URL`` / ``HYOUKA_FLINK_JDBC_URI`` /
+          ``HYOUKA_FLINK_CATALOG_NAME`` — Flink engine overrides.
         """
         env = os.environ
-        if v := env.get("FLOE_PROJECT"):
+        if v := env.get("HYOUKA_PROJECT"):
             self.project = v
-        if v := env.get("FLOE_CATALOG_TYPE"):
+        if v := env.get("HYOUKA_CATALOG_TYPE"):
             self.catalog.type = v
-        if v := env.get("FLOE_CATALOG_URI"):
+        if v := env.get("HYOUKA_CATALOG_URI"):
             self.catalog.uri = v
-        if v := env.get("FLOE_WAREHOUSE"):
+        if v := env.get("HYOUKA_WAREHOUSE"):
             self.catalog.warehouse = v
-        if v := env.get("FLOE_TRANSFORMATIONS_DIR"):
+        if v := env.get("HYOUKA_TRANSFORMATIONS_DIR"):
             self.transformations_dir = v
 
         s3_map = {
-            "FLOE_S3_ENDPOINT": "s3.endpoint",
-            "FLOE_S3_ACCESS_KEY_ID": "s3.access-key-id",
-            "FLOE_S3_SECRET_ACCESS_KEY": "s3.secret-access-key",
-            "FLOE_S3_REGION": "s3.region",
+            "HYOUKA_S3_ENDPOINT": "s3.endpoint",
+            "HYOUKA_S3_ACCESS_KEY_ID": "s3.access-key-id",
+            "HYOUKA_S3_SECRET_ACCESS_KEY": "s3.secret-access-key",
+            "HYOUKA_S3_REGION": "s3.region",
         }
         for env_key, prop_key in s3_map.items():
             if v := env.get(env_key):
                 self.catalog.properties[prop_key] = v
 
-        prefix = "FLOE_CATALOG_PROP__"
+        prefix = "HYOUKA_CATALOG_PROP__"
         for key, value in env.items():
             if key.startswith(prefix):
                 prop = key[len(prefix) :].lower().replace("__", ".")
@@ -209,13 +209,13 @@ class FloeConfig(BaseModel):
         self._apply_compute_env_overrides(env)
 
     def _apply_compute_env_overrides(self, env) -> None:
-        """Apply ``FLOE_COMPUTE_*`` / ``FLOE_FLINK_*`` overrides, re-validating.
+        """Apply ``HYOUKA_COMPUTE_*`` / ``HYOUKA_FLINK_*`` overrides, re-validating.
 
         Engine/trigger flow through ``ComputeConfig`` validation again so the
         cross-field rules (e.g. push requires Flink) still hold when set via env.
         """
-        engine = env.get("FLOE_COMPUTE_ENGINE")
-        trigger = env.get("FLOE_COMPUTE_TRIGGER")
+        engine = env.get("HYOUKA_COMPUTE_ENGINE")
+        trigger = env.get("HYOUKA_COMPUTE_TRIGGER")
         if engine or trigger:
             self.compute = ComputeConfig.model_validate(
                 {
@@ -226,9 +226,9 @@ class FloeConfig(BaseModel):
             )
 
         flink_overrides = {
-            "sql_gateway_url": env.get("FLOE_FLINK_SQL_GATEWAY_URL"),
-            "jdbc_uri": env.get("FLOE_FLINK_JDBC_URI"),
-            "catalog_name": env.get("FLOE_FLINK_CATALOG_NAME"),
+            "sql_gateway_url": env.get("HYOUKA_FLINK_SQL_GATEWAY_URL"),
+            "jdbc_uri": env.get("HYOUKA_FLINK_JDBC_URI"),
+            "catalog_name": env.get("HYOUKA_FLINK_CATALOG_NAME"),
         }
         if any(v is not None for v in flink_overrides.values()):
             base = self.compute.flink or FlinkConfig()
@@ -287,7 +287,7 @@ class FloeConfig(BaseModel):
 
         Honours an explicit ``compute.flink.jdbc_uri`` override; otherwise derives
         the plain Java JDBC URI from the SQLAlchemy-style ``catalog.uri`` (only the
-        Postgres dialect Floe ships is supported for the Flink engine).
+        Postgres dialect Hyouka ships is supported for the Flink engine).
         """
         from urllib.parse import urlparse
 
@@ -313,7 +313,7 @@ class FloeConfig(BaseModel):
     def flink_catalog_properties(self) -> dict[str, str]:
         """Assemble the ``CREATE CATALOG ... WITH (...)`` properties for Flink.
 
-        Reuses the same warehouse and object-store credentials the rest of Floe
+        Reuses the same warehouse and object-store credentials the rest of Hyouka
         uses (from ``catalog.warehouse`` / ``catalog.properties``), so Flink reads
         and writes the identical Iceberg catalog.
         """

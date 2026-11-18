@@ -11,12 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker Compose deployment with MinIO (S3-compatible object storage) and a
   Postgres-backed Iceberg SQL catalog, plus a multi-stage, non-root `Dockerfile`.
 - Pluggable compute engine with a new opt-in **Flink** engine
-  (`compute.engine: flink`): Floe submits each table's SQL to a Flink SQL Gateway
+  (`compute.engine: flink`): Hyouka submits each table's SQL to a Flink SQL Gateway
   over REST, computing the refresh on a Flink cluster and writing back to the same
-  Iceberg catalog with identical `_floe_*` lineage columns. Scope today:
+  Iceberg catalog with identical `_hyouka_*` lineage columns. Scope today:
   unpartitioned tables, batch, poll-triggered (`INSERT OVERWRITE`, or
   create-on-first-run); partitioned refresh is roadmap.
-- **Streaming push** (`trigger: push` with `compute.engine: flink`): `floe watch`
+- **Streaming push** (`trigger: push` with `compute.engine: flink`): `hyouka watch`
   submits one long-running Flink streaming job per table that reads its upstream
   Iceberg table as a streaming source (every `compute.flink.monitor_interval`) and
   appends new rows to the output as upstream commits land. Scoped to single-source,
@@ -30,20 +30,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service (REST on :8083) the Flink engine submits to.
 - Opt-in `flink` Compose profile: a small Apache Flink cluster (JobManager +
   TaskManager + SQL Gateway) that operates on the same Iceberg catalog and
-  warehouse as Floe, with a one-shot Flink SQL job that reads a Floe-authored
+  warehouse as Hyouka, with a one-shot Flink SQL job that reads a Hyouka-authored
   silver table and writes a gold rollup back into the catalog (a cross-engine
   interop demo alongside the Flink compute engine above).
-- `FLOE_*` environment variable overrides for 12-factor configuration on top of
+- `HYOUKA_*` environment variable overrides for 12-factor configuration on top of
   the YAML config, including URI-aware warehouse resolution (`s3://`, `file://`,
   and local paths).
 - Passthrough of arbitrary PyIceberg catalog properties (for example S3
   endpoint, credentials, and region) from config into the catalog.
-- Graceful `SIGTERM`/`SIGINT` shutdown for the long-running `floe watch` worker.
+- Graceful `SIGTERM`/`SIGINT` shutdown for the long-running `hyouka watch` worker.
 - Project governance and community health files: `LICENSE`, `CONTRIBUTING.md`,
   `CODE_OF_CONDUCT.md`, `SECURITY.md`, issue and pull request templates, and a
   Dependabot configuration.
 
 ### Changed
+- **Renamed the project from Floe to Hyouka.** The Python package is now
+  `hyouka` (`import hyouka`), the command is `hyouka`, the default config file
+  is `hyouka.yaml`, local state lives in `.hyouka/`, environment variables use
+  the `HYOUKA_` prefix, lineage columns use the `_hyouka_` prefix (for example
+  `_hyouka_input_snapshot_id`), and Iceberg table properties use the `hyouka.`
+  prefix. There is no `floe` alias or fallback. To migrate an existing project,
+  rename `floe.yaml` to `hyouka.yaml`, rename any `FLOE_*` environment
+  variables to `HYOUKA_*`, delete the old `.floe/` folder, and rebuild the
+  derived tables (tables written before the rename keep their `_floe_*`
+  columns and `floe.*` checkpoint properties, which Hyouka does not read).
 - Multi-upstream staleness detection now tracks the snapshot ID of every
   upstream table, so a downstream table refreshes when any upstream changes.
 - `compute.engine` is now validated and pluggable: `duckdb` (default) and
@@ -75,8 +85,8 @@ Initial public release.
 - `FULL` and `INCREMENTAL` refresh modes, with partition-aware refresh windows.
 - A polling watcher that auto-refreshes downstream tables when upstream Iceberg
   tables receive new commits, with a live terminal dashboard.
-- `floe` command-line interface (`apply`, `watch`, `version`, and related
+- `hyouka` command-line interface (`apply`, `watch`, `version`, and related
   commands) and a worked quickstart under `examples/`.
 
-[Unreleased]: https://github.com/takasoft/floe/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/takasoft/floe/releases/tag/v0.1.0
+[Unreleased]: https://github.com/takasoft/hyouka/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/takasoft/hyouka/releases/tag/v0.1.0
