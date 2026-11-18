@@ -134,15 +134,13 @@ class FlinkSQLGatewayClient:
 
     def _run(self, session: str, statement: str, *, wait_seconds: float) -> str:
         """Submit a statement, poll to completion, and return the operation handle."""
-        resp = self._request(
-            "POST", f"/v1/sessions/{session}/statements", {"statement": statement}
-        )
+        resp = self._request("POST", f"/v1/sessions/{session}/statements", {"statement": statement})
         op = resp["operationHandle"]
         deadline = time.monotonic() + wait_seconds
         while True:
-            status = self._request(
-                "GET", f"/v1/sessions/{session}/operations/{op}/status"
-            ).get("status")
+            status = self._request("GET", f"/v1/sessions/{session}/operations/{op}/status").get(
+                "status"
+            )
             if status == "FINISHED":
                 return op
             if status in {"ERROR", "CANCELED", "CLOSED", "TIMEOUT"}:
@@ -277,9 +275,7 @@ class FlinkExecutor:
             self._create_empty_table(catalog_name, namespace, fq_target, select_sql)
 
         streaming_select = self._inject_streaming_hint(select_sql, dit.upstream_tables[0])
-        job_id = self._submit_streaming_insert(
-            catalog_name, namespace, fq_target, streaming_select
-        )
+        job_id = self._submit_streaming_insert(catalog_name, namespace, fq_target, streaming_select)
         return StreamHandle(table=dit.name, job_id=job_id, job_run_id=job_run_id)
 
     def _assert_streamable(self, dit: DynamicTable) -> None:
